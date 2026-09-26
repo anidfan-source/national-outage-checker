@@ -2,6 +2,7 @@
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 import json
+import os
 import re
 
 import pydeck as pdk
@@ -21,6 +22,18 @@ st.markdown('''<style>
 
 CATEGORY_LABELS = {'broadband':'Broadband & mobile backup','electricity':'Power cuts','third-party':'Cloud, DNS & apps','environment':'Weather & flood risk','routing':'Routing & internet signals'}
 CLOSED = {'resolved','completed','postmortem'}
+
+def street_manager_configured():
+    """Return True when Street Manager credentials are supplied securely."""
+    try:
+        cfg = st.secrets.get('street_manager', {})
+        username = cfg.get('username')
+        password = cfg.get('password')
+    except Exception:
+        username = password = None
+    username = username or os.getenv('STREET_MANAGER_USERNAME')
+    password = password or os.getenv('STREET_MANAGER_PASSWORD')
+    return bool(username and password)
 
 @st.cache_data(ttl=server.INTERVAL, show_spinner='Collecting public outage feeds…')
 def load_dashboard():
@@ -168,6 +181,10 @@ def category_view(key,title,description):
 
 def sources_view():
     header(DATA,'Data quality','Sources & connection health','See what is automated, stale or only a provider portal before relying on a result.'); records,summary=filters(DATA)
+    if street_manager_configured():
+        st.success('Street Manager credentials are configured securely. The v7 adapter/webhook can use them without exposing them in source code.')
+    else:
+        st.info('Street Manager is not configured. Add [street_manager] username/password to Streamlit secrets or STREET_MANAGER_USERNAME/STREET_MANAGER_PASSWORD environment variables.')
     states=Counter(s.get('state','unknown') for s in DATA['sources'])
     for col,state in zip(st.columns(4),('connected','stale','unavailable','portal-only')): col.metric(state.replace('-',' ').title(),states.get(state,0))
     exports(records,DATA,summary)
