@@ -36,27 +36,13 @@ def street_manager_configured():
     return bool(username and password)
 
 def configure_street_manager():
-    """Expose Streamlit secrets to the collector process without logging values."""
+    """Expose the Open Data receiver configuration to the collector process."""
     try:
         cfg = st.secrets.get('street_manager', {})
-        if cfg.get('username'): os.environ['STREET_MANAGER_USERNAME'] = str(cfg['username'])
-        if cfg.get('password'): os.environ['STREET_MANAGER_PASSWORD'] = str(cfg['password'])
-        if cfg.get('base_url'): os.environ['STREET_MANAGER_BASE_URL'] = str(cfg['base_url']).rstrip('/')
-        if cfg.get('api_version'): os.environ['STREET_MANAGER_API_VERSION'] = str(cfg['api_version'])
+        if cfg.get('webhook_url'): os.environ['STREET_MANAGER_WEBHOOK_URL'] = str(cfg['webhook_url']).rstrip('/')
+        if cfg.get('webhook_token'): os.environ['STREET_MANAGER_WEBHOOK_TOKEN'] = str(cfg['webhook_token'])
     except Exception:
         pass
-
-@st.cache_data(ttl=server.INTERVAL, show_spinner='Collecting public outage feeds…')
-def load_dashboard():
-    server.init_db(); server.refresh(); return server.snapshot()
-
-@st.cache_data(ttl=86400, show_spinner='Loading historic flood warnings…')
-def load_historic_flood_warnings():
-    return fetch_historic_flood_warnings()
-
-@st.cache_data(show_spinner='Loading bundled historic weather warnings…')
-def load_historic_weather_warnings():
-    return fetch_historic_weather_warnings()
 
 def text(value): return str(value or '').casefold()
 
