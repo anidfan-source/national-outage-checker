@@ -21,10 +21,10 @@ Open the Streamlit URL it prints (normally http://localhost:8501). Use `PORT=800
 
 ## Coverage
 
-The registry in `sources.py` contains 56 sources:
+The registry in `sources.py` contains 59 sources:
 
-- **23 automatic feeds:** the earlier service, power and environment feeds plus SSEN Power Track, National Grid Electricity Distribution, IODA UK-related network signals and RIPE Atlas public UK probe disconnections.
-- **33 portal/access-dependent sources:** major UK fixed and mobile broadband providers, fibre altnets, satellite broadband, remaining electricity distribution operators, NESO, DNS, peering/routing measurement services, devolved flood agencies and streetworks data.
+- **24 automatic feeds:** provider, service, power, environment and passive-network signals, plus a privacy-minimised UK community telecoms report feed.
+- **35 portal/access-dependent sources:** major UK fixed and mobile broadband providers, fibre altnets, satellite broadband, remaining electricity distribution operators, NESO, DNS, peering/routing measurement services, devolved flood agencies, streetworks data and the Downtech/Outages.co.uk manual reference.
 
 Portal-only entries are explicitly **not connected**. Their notes explain the next access or adapter requirement. Some links lead to provider help/home pages rather than a public feed. Availability is checked for automatic feeds on every collection; HTTP errors, timeouts and invalid responses appear in the source directory. There is no claim of exhaustive coverage: new providers appear, private line faults require customer information and many services have no public outage API.
 
@@ -37,6 +37,7 @@ At initial verification, 17 of 19 feeds responded successfully; Fastly returned 
 - RSS/Atom items remain **notices**, because generic feeds do not reliably expose current resolution state. Check their source before treating them as active faults. Weather notices are risk context, not a confirmed broadband outage.
 - Northern Powergrid records are paginated. Future work is marked scheduled. Its published coordinates appear on the map. Estimated restoration times are estimates, not resolution evidence.
 - Global incidents remain unlocated unless their text supplies geographic evidence; no assumed UK impact. Flood warnings currently appear in the list without flood-area geometry.
+- UK Utility Reporter community reports retain only the report status, postcode district and affected-count estimate. Reporter descriptions, street addresses, images and precise source coordinates are not collected. They are unverified evidence, never a confirmed outage.
 - SQLite stores normalized records in `data/outages.sqlite3`. Records are upserted by source and incident ID; absent feed records remain in history but leave the current view. Disappearance is not labelled resolution. Records not observed for 366 days are pruned. This stores latest incident state, not an audit log of every update.
 - Failed feeds retain their previous records with a **stale** label. A successful empty feed is different from an unavailable feed. On restart, persisted data remains stale until its source reconnects. Last-success timestamps are held in memory; record observation timestamps persist.
 - Live view shows current non-resolved entries including notices and planned work. History filters apply to incident start/publication dates. Undated notices remain in live view but cannot be charted. The chart always shows collected history, respecting category/provider/search filters; daily mode covers 30 days and monthly mode covers the selected number of months.

@@ -82,4 +82,16 @@ class PublicConnectorTests(unittest.TestCase):
     def test_ripe_truncated_snapshot_fails(self):
         with self.assertRaises(ValueError):get_pages(self.source('ripe'),lambda _:json.dumps({'results':[],'count':20,'next':None}))
 
+    def test_community_reports_minimise_personal_location_data(self):
+        source=next(s for s in SOURCES if s['kind']=='community')
+        payload={'ok':True,'reports':[{'id':'abc','postcode':'LS1 1AA','address':'Private home',
+            'description':'My router and account are down', 'lat':53.8,'lon':-1.5,
+            'severity':'urgent','affected_count':3,'status':'reported','submitted_at':1760000000000}]}
+        rows=__import__('server').parse(source,json.dumps(payload))
+        self.assertEqual(rows[0]['region'],'LS1')
+        self.assertEqual(rows[0]['evidenceType'],'community-report')
+        self.assertNotIn('Private home',json.dumps(rows))
+        self.assertNotIn('router and account',json.dumps(rows))
+        self.assertIsNone(rows[0]['lat'])
+
 if __name__=='__main__':unittest.main()

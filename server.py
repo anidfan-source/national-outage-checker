@@ -68,6 +68,16 @@ def event(source, key, title, started, status='unknown', description='', url=Non
                 description=plain(description), url=safe_url(url, source['website']), lat=lat, lng=lng,
                 region=plain(region or source['scope']), observedAt=now())
 
+def timestamp_ms(value):
+    try:
+        return datetime.fromtimestamp(float(value) / 1000, timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+def postcode_district(value):
+    match = re.match(r'^\s*([A-Z]{1,2}\d[A-Z\d]?)\b', str(value or ''), re.I)
+    return match.group(1).upper() if match else None
+
 def parse(source, raw):
     kind = source['kind']
     if kind == 'rss':
@@ -118,6 +128,32 @@ def parse(source, raw):
             result.append(event(source, x.get('reference') or x['id'], x.get('natureofoutage') or 'Power cut', started,
                                 status, f"{x.get('reason') or ''} {x.get('customerstagesequencemessage') or ''} Customers: {x.get('totalconfirmedpowercut', 'unknown')}. Estimated restoration: {x.get('estimatedtimetillresolution') or 'unknown'}.",
                                 source['website'], x.get('lat'), x.get('lng'), ', '.join(x.get('postcode') or []) or x.get('area')))
+        return result
+    if kind == 'community':
+        if data.get('ok') is not True or not isinstance(data.get('reports'), list):
+            raise ValueError('Missing community reports array')
+        result = []
+        for item in data['reports']:
+            if not item.get('id'):
+                raise ValueError('Community report has no ID')
+            district = postcode_district(item.get('postcode'))
+            severity = str(item.get('severity') or 'routine').lower()
+            count = item.get('affected_count')
+            try:
+                count = int(count) if count is not None else None
+            except (TypeError, ValueError):
+                count = None
+            description = 'User-submitted report; unverified.'
+            if count is not None:
+                description += f' {count} people marked themselves as affected.'
+            record = event(source, item['id'], 'Community telecoms report' + (f' · {severity}' if severity else ''),
+                           timestamp_ms(item.get('submitted_at')), 'community-report', description,
+                           item.get('map_url'), region=district or source['scope'])
+            # Do not ingest free text, street address, photographs or household-level coordinates.
+            record.update(evidenceType='community-report', reportStatus=item.get('status'),
+                          affectedCount=count, locationMethod='postcode-district',
+                          attribution='UK Utility Reporter public community reports')
+            result.append(record)
         return result
     raise ValueError('Unknown adapter')
 

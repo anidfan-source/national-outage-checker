@@ -31,6 +31,7 @@ requirements explicit. A provider page is not treated as an API endpoint.
 | National Grid Electricity Distribution | `https://connecteddata.nationalgrid.co.uk/api/3/action/datastore_search?resource_id=292f788f-4339-455b-8cc0-153e14509d4d` | Public | Power-cut records; upload time is checked for staleness |
 | IODA | `https://api.ioda.inetintel.cc.gatech.edu/v2/outages/events` | Public | UK-related network anomaly signals |
 | RIPE Atlas | `https://atlas.ripe.net/api/v2/probes/` | Public | Disconnected public UK probes |
+| UK Utility Reporter | `https://www.ukutilityreporter.co.uk/api/reports?type=telecoms&limit=500` | Public, no authentication | User-submitted UK telecoms reports. The app retains only report state, postcode district and affected-count estimate; it remains unverified community evidence. |
 
 ## Street Manager: roadworks source
 
@@ -96,3 +97,12 @@ Ireland flood information and one.network.
 For all environment, roadworks and network signals, the application labels a
 geographic overlap as context or correlation. It never represents it as proof
 of a household broadband fault.
+
+## Crowd-reporting references
+
+Downtech operates the UK site `https://outages.co.uk/`, which presents
+user-report trends for UK providers. Its public site has no documented API,
+RSS feed or data licence for automated ingestion, so it is listed in the
+application as a portal-only manual reference. It must not be scraped as a
+replacement for an integration agreement. Downdetector likewise provides a
+documented API only through its Enterprise product.

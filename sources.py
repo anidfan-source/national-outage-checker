@@ -29,6 +29,7 @@ feed('npg', 'Northern Powergrid', 'electricity', 'npg', 'https://northernpowergr
 feed('metoffice', 'Met Office weather warnings', 'environment', 'rss', 'https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK', 'https://weather.metoffice.gov.uk/warnings-and-advice', 'UK', 'Risk context, not proof of a broadband outage. Verify warning validity at source.')
 feed('ea', 'Environment Agency flood warnings', 'environment', 'flood', 'https://environment.data.gov.uk/flood-monitoring/id/floods', 'https://check-for-flooding.service.gov.uk/', 'England', 'Environment Agency flood and river level data: Open Government Licence. Risk context, not a confirmed broadband fault.')
 feed('ea-historic', 'Environment Agency historic flood warnings', 'environment', 'portal', None, 'https://www.data.gov.uk/dataset/d4fb2591-f4dd-4e7f-9aaf-49af94437b36/historic-flood-warnings2', 'England, 2006 onwards', 'Quarterly historical download. Loaded only for environmental History views; a flood warning is risk context, not proof of a broadband fault.')
+feed('uk-utility-reporter', 'UK Utility Reporter community telecoms reports', 'broadband', 'community', 'https://www.ukutilityreporter.co.uk/api/reports?type=telecoms&limit=500', 'https://www.ukutilityreporter.co.uk/', 'UK', 'Public, user-submitted telecoms reports. The collector keeps only the report state, postcode district and affected-count estimate; it does not retain reporter text, address, photos or source coordinates. Treat as unverified community evidence.')
 
 # These require a location, customer session, licensed access or a bespoke adapter.
 for id, name, category, website, note in [
@@ -69,6 +70,7 @@ for id, name, category, website, note in [
  ('nrw','Natural Resources Wales floods','environment','https://flood-warning.naturalresources.wales/','Wales flood risk portal; adapter pending.'),
  ('ni-flood','Northern Ireland flood information','environment','https://www.nidirect.gov.uk/articles/check-risk-flooding-your-area','Northern Ireland flood risk information; adapter pending.'),
  ('one-network','one.network roadworks','environment','https://one.network/','Streetworks and cable-damage risk; licensed data integration needed.'),
+ ('downtech','Downtech / Outages.co.uk community reports','broadband','https://outages.co.uk/','Downtech operates the UK Outages.co.uk crowd-reporting site. No documented data API or feed was found, so this is a manual reference rather than an automated source.'),
 ]:
     feed(id,name,category,'portal',None,website,'See provider coverage',note)
 
