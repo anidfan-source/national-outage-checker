@@ -60,6 +60,7 @@
           <h2>View mode</h2>
           <button id="liveToggle" class="primary-btn" type="button" aria-pressed="true">Live view · switch to history</button>
           <label for="sourceFilter">Provider</label><select id="sourceFilter"><option value="">All providers</option></select>
+          <label for="locationFilter">Dialling code / postcode area</label><input id="locationFilter" type="search" placeholder="0113, LS or LS1 1AA" aria-describedby="locationHelp" /><p id="locationHelp" class="feed-detail"></p>
           <label for="search">Search incidents and sources</label><input id="search" type="search" placeholder="Provider, postcode or issue" />
         </div>
 
@@ -70,7 +71,7 @@
       </aside>
 
       <main class="map-panel">
-        <section class="status-banner"><strong id="connectionStatus" role="status">Connecting to feeds…</strong><p>Provider reports and potential risks, not a diagnosis of your home connection. Global incidents may not affect the UK. Only source-supplied coordinates appear on the map.</p><p id="mapStatus"></p></section>
+        <section class="status-banner"><strong id="connectionStatus" role="status">Connecting to feeds…</strong><p>Provider reports and potential risks, not a diagnosis of your home connection. Global incidents may not affect the UK. Source coordinates take priority. Telephone and postcode locations are approximate, shown with hollow dashed markers.</p><p id="mapStatus"></p><small id="locationCoverage"></small><p class="feed-detail">Location reference: <a href="https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/telephone-area-codes-tool" target="_blank" rel="noopener noreferrer">Ofcom</a> and <a href="https://www.geonames.org/" target="_blank" rel="noopener noreferrer">GeoNames</a> (CC BY 4.0), adapted into approximate town/postcode associations.</p></section>
         <div id="map"></div>
         <div class="timeline-panel">
           <h2 id="trendTitle">Incident trend</h2>

@@ -18,6 +18,7 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 from sources import SOURCES
+from locations import enrich, reference_summary
 
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'data' / 'outages.sqlite3'
@@ -188,8 +189,9 @@ def snapshot():
     health = {s['id']: s for s in state['sources']}
     with database() as conn:
         rows = conn.execute('SELECT source,current,body FROM incidents').fetchall()
-    state['incidents'] = [{**json.loads(body), 'current': bool(current),
+    state['incidents'] = [{**enrich(json.loads(body)), 'current': bool(current),
                            'stale': health.get(source, {}).get('state') != 'connected'} for source, current, body in rows]
+    state['locationReference'] = reference_summary()
     state['pollSeconds'] = INTERVAL
     return state
 

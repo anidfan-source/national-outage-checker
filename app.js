@@ -25,10 +25,35 @@ const formatDate = value => value ? new Date(value).toLocaleString('en-GB') : 'N
 function selectedCategories() {
   return new Set([...document.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.value));
 }
+function locationSelection() {
+  const query = $('locationFilter').value.trim().toUpperCase();
+  if (!query) return null;
+  const codes = data.locationReference?.codes || [];
+  const code = query.replace(/[\s()-]/g, '').replace(/^(?:\+44|0044)0?/, '0');
+  const telephone = codes.find(x => x.code === code);
+  if (telephone) return {code, areas: telephone.postcodeAreas, label: `${code} · ${telephone.place} → ${telephone.postcodeAreas.join(', ') || 'postcode association unavailable'} (approximate)`};
+  const postal = query.match(/^([A-Z]{1,2})(?:\d[A-Z\d]?(?:\s*\d[A-Z]{2})?)?$/);
+  if (postal) return {areas:[postal[1]], label:`Postcode area ${postal[1]} · includes approximate telephone associations, not a household match`};
+  return {areas:[], label:'Enter a geographic dialling code (0113), postcode area (LS), district or postcode.'};
+}
+function locationMatches(item) {
+  const selection = locationSelection();
+  return !selection || (item.telephoneAreas || []).some(x => x.code === selection.code) ||
+    (item.postcodeAreas || []).some(x => selection.areas.includes(x));
+}
+function locationDetails(item) {
+  const phones = (item.telephoneAreas || []).map(x => `${x.code} ${x.place} → ${x.postcodeAreas.join(', ') || 'postcode association unavailable'}`);
+  const parts = [];
+  if (item.reportedPostcodeAreas?.length) parts.push(`Reported postcode areas: ${item.reportedPostcodeAreas.join(', ')}`);
+  if (phones.length) parts.push(`Telephone associations (approximate): ${phones.join('; ')}`);
+  if (item.locationConflict) parts.push('Postcode and telephone evidence differ; source location takes priority.');
+  if ((item.locationPoints || []).some(x => x.method === 'postcode-district')) parts.push('Map shows approximate postcode district centres.');
+  return parts.map(x => `<p class="location-detail">${escapeHTML(x)}</p>`).join('');
+}
 function matches(item) {
   const query = $('search').value.trim().toLowerCase();
   return selectedCategories().has(item.category) && (!$('sourceFilter').value || (item.sourceId || item.id) === $('sourceFilter').value) &&
-    (!query || [item.title, item.provider, item.name, item.region, item.description, item.note].join(' ').toLowerCase().includes(query));
+    (!query || [item.title, item.provider, item.name, item.region, item.description, item.note, ...(item.postcodeAreas || []), ...(item.telephoneAreas || []).flatMap(x => [x.code, x.place])].join(' ').toLowerCase().includes(query));
 }
 function startDate() {
   const start = new Date();
@@ -38,27 +63,33 @@ function startDate() {
   return start;
 }
 function incidents() {
-  return data.incidents.filter(item => matches(item) && (live ? item.current && !closed.has(item.status) :
+  return data.incidents.filter(item => matches(item) && locationMatches(item) && (live ? item.current && !closed.has(item.status) :
     item.date && new Date(item.date) >= startDate() && new Date(item.date) <= new Date()))
     .sort((a,b) => (b.date || b.observedAt).localeCompare(a.date || a.observedAt));
 }
 function render() {
   const rows = incidents();
+  $('locationHelp').textContent = locationSelection()?.label || 'Match incidents by dialling code or postcode area. Telephone associations are approximate.';
+  $('locationCoverage').textContent = data.locationReference ? `${data.locationReference.mappedCount} of ${data.locationReference.codeCount} telephone prefixes have postcode associations. Hollow dashed markers indicate approximate locations. Reference: Ofcom + GeoNames.` : 'Location reference loading…';
   $('totals').innerHTML = Object.entries(categories).map(([key, c]) => `<div class="stat-card"><span>${c.label}</span><strong>${rows.filter(x => x.category === key).length}</strong></div>`).join('');
   $('incidentSummary').textContent = `${rows.length} ${live ? 'current feed entries (including notices, planned work and stale reports)' : 'historical entries in selected months'}. Notices have unconfirmed current status. History grows from collected feeds; missing months do not imply zero outages.`;
   $('incidents').innerHTML = rows.slice(0, pageSize).map(item => `<article class="incident-card">
     <div class="card-meta"><span>${escapeHTML(item.provider)}</span><span class="badge ${item.stale || !apiAvailable ? 'unavailable' : ''}">${escapeHTML(item.status)}${item.stale || !apiAvailable ? ' · stale' : ''}</span></div>
     <h3><a href="${safeLink(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHTML(item.title)}</a></h3>
-    <p>${escapeHTML(item.description.slice(0, 700))}</p><small>${escapeHTML(item.region)} · Reported: ${escapeHTML(formatDate(item.date))} · Last fetched: ${escapeHTML(formatDate(item.observedAt))}</small>
+    ${locationDetails(item)}<p>${escapeHTML(item.description.slice(0, 700))}</p><small>${escapeHTML(item.region)} · Reported: ${escapeHTML(formatDate(item.date))} · Last fetched: ${escapeHTML(formatDate(item.observedAt))}</small>
   </article>`).join('') || '<p class="empty">No matching records available. Check connection coverage below; this does not confirm normal service.</p>';
   $('showMore').hidden = rows.length <= pageSize;
-  const mapped = rows.filter(x => Number.isFinite(x.lat) && Number.isFinite(x.lng));
-  $('mapStatus').textContent = `${mapped.length} entries have source coordinates; ${rows.length - mapped.length} have no point location and appear only in the list.`;
+  const mapped = rows.filter(x => x.locationPoints?.length);
+  const exact = mapped.filter(x => x.locationPoints.some(p => p.method === 'source')).length;
+  const points = mapped.flatMap(item => item.locationPoints.map(point => ({item,point})));
+  $('mapStatus').textContent = `${exact} incidents have source coordinates; ${mapped.length-exact} have approximate locations; ${rows.length-mapped.length} remain unlocated. ${points.length} markers represent ${mapped.length} incidents.`;
   if (map) {
     if (activeLayer) map.removeLayer(activeLayer);
-    activeLayer = L.layerGroup(mapped.map(item => L.circleMarker([item.lat,item.lng], {
-      radius: 8, color: categories[item.category].color, fillOpacity: item.stale || !apiAvailable ? 0.3 : 0.8,
-    }).bindPopup(`<strong>${escapeHTML(item.provider)}</strong><p>${escapeHTML(item.title)}</p><p>${escapeHTML(item.region)}</p><p>${escapeHTML(item.status)}${item.stale || !apiAvailable ? ' · stale' : ''}</p><a href="${safeLink(item.url)}" target="_blank" rel="noopener noreferrer">Source details</a>`)));
+    activeLayer = L.layerGroup(points.map(({item,point}) => L.circleMarker([point.lat,point.lng], {
+      radius: point.method === 'source' ? 8 : 11, color: categories[item.category].color,
+      dashArray: point.method === 'source' ? null : '4 3',
+      fillOpacity: point.method !== 'source' ? 0.08 : item.stale || !apiAvailable ? 0.3 : 0.8,
+    }).bindPopup(`<strong>${escapeHTML(item.provider)}</strong><p>${escapeHTML(item.title)}</p><p>${escapeHTML(point.label)}</p>${locationDetails(item)}<p>${escapeHTML(item.status)}${item.stale || !apiAvailable ? ' · stale' : ''}</p><a href="${safeLink(item.url)}" target="_blank" rel="noopener noreferrer">Source details</a>`)));
     activeLayer.addTo(map);
   }
   renderTimeline();
@@ -83,7 +114,7 @@ function renderTimeline() {
     if (daily) end.setDate(end.getDate()+1); else end.setMonth(end.getMonth()+1);
     return {start:d, end, label:d.toLocaleDateString('en-GB', daily ? {day:'numeric', month:'short'} : {month:'short', year:'2-digit'}), count:0};
   });
-  data.incidents.filter(matches).forEach(item => {
+  data.incidents.filter(item => matches(item) && locationMatches(item)).forEach(item => {
     if (!item.date || new Date(item.date) > new Date()) return;
     const bucket = buckets.find(b => new Date(item.date) >= b.start && new Date(item.date) < b.end);
     if (bucket) bucket.count++;
@@ -111,6 +142,7 @@ async function load() {
 }
 document.querySelectorAll('input[type="checkbox"]').forEach(el => el.addEventListener('change', ()=>{pageSize=50;render();}));
 ['sourceFilter','viewMode'].forEach(id => $(id).addEventListener('change', ()=>{pageSize=50;render();}));
+$('locationFilter').addEventListener('input', ()=>{pageSize=50;render();});
 $('search').addEventListener('input', ()=>{pageSize=50;render();});
 $('monthRange').addEventListener('input', ()=>{$('rangeValue').textContent=`${$('monthRange').value} months`;render();});
 $('liveToggle').addEventListener('click', ()=>{

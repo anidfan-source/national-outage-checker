@@ -27,11 +27,11 @@ At initial verification, 17 of 19 feeds responded successfully; Fastly returned 
 - Statuspage history and unresolved incidents are combined by provider incident ID. Public feeds only provide limited history. Statuspage scheduled-maintenance endpoints are not yet ingested; Zen maintenance is connected separately.
 - RSS/Atom items remain **notices**, because generic feeds do not reliably expose current resolution state. Check their source before treating them as active faults. Weather notices are risk context, not a confirmed broadband outage.
 - Northern Powergrid records are paginated. Future work is marked scheduled. Its published coordinates appear on the map. Estimated restoration times are estimates, not resolution evidence.
-- Global incidents remain unlocated; no invented UK coordinates or assumed UK impact. Flood warnings currently appear in the list without flood-area geometry.
+- Global incidents remain unlocated unless their text supplies geographic evidence; no assumed UK impact. Flood warnings currently appear in the list without flood-area geometry.
 - SQLite stores normalized records in `data/outages.sqlite3`. Records are upserted by source and incident ID; absent feed records remain in history but leave the current view. Disappearance is not labelled resolution. Records not observed for 366 days are pruned. This stores latest incident state, not an audit log of every update.
 - Failed feeds retain their previous records with a **stale** label. A successful empty feed is different from an unavailable feed. On restart, persisted data remains stale until its source reconnects. Last-success timestamps are held in memory; record observation timestamps persist.
 - Live view shows current non-resolved entries including notices and planned work. History filters apply to incident start/publication dates. Undated notices remain in live view but cannot be charted. The chart always shows collected history, respecting category/provider/search filters; daily mode covers 30 days and monthly mode covers the selected number of months.
-- No postcode-to-household correlation, account-based line diagnostics or automatic causality claims are implemented. Searching a postcode matches published text only.
+- Telephone area codes and postcodes in incident text enrich locations and postcode-area search. No postcode-to-household correlation, account-based line diagnostics or automatic causality claims are implemented.
 
 ## Sources and attribution
 
@@ -52,3 +52,13 @@ python3 -m unittest -v
 ```
 
 Tests cover parsing, dates, unresolved incident collection, stale retention, archive deduplication, future power work, schema rejection and unsafe source URLs. Live network health is visible at `/api/dashboard`; the API has no caller-supplied upstream URL and static serving is restricted to the four frontend files.
+
+## Telephone area codes and postcode areas
+
+The **Dialling code / postcode area** filter accepts e.g. `0113`, `+44 113`, `LS`, or `LS1 1AA`. Postcodes filter at area level (LS), not household level. Code filters also include incidents whose reported postcode areas overlap the code’s approximate associations. The filter applies to incidents, totals, map and timeline, leaving the source directory available.
+
+A bundled Ofcom/GeoNames reference contains 771 geographic codes/prefixes, 684 with town-based postcode associations, and 3,002 postcode district points. For example, 0113 → Leeds → LS. These are incomplete approximate associations, **not coverage boundaries**. Extended prefixes distinguish shared code localities; unresolved shared codes retain multiple candidates without a map point.
+
+Only standalone codes in incident context are used; contact/support numbers and non-geographic numbers are ignored. Existing source coordinates take priority, then published postcode district points, then inferred telephone locality points. Approximate points have hollow dashed markers. The incident list shows evidence and conflicting associations. Multiple locations remain one incident in totals. This also enriches previously collected history at read time.
+
+See [reference methodology, attribution and limitations](reference/README.md). The offline reference needs no runtime geocoder or credentials. Regenerate with `python3 scripts/build_location_reference.py` and review its diff before adopting new data.

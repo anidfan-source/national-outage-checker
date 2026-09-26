@@ -251,3 +251,6 @@ label[for="sourceFilter"], label[for="search"] { display: block; margin-top: 14p
 @media (max-width: 600px) { .map-panel { grid-template-rows: auto 380px 210px auto auto; } #map { min-height: 380px; } .card-meta { flex-wrap: wrap; } }
 .map-panel { grid-template-columns: minmax(0, 1fr); }
 .map-panel > * { min-width: 0; }
+label[for="locationFilter"] { display: block; margin-top: 14px; }
+.location-detail { color: var(--accent-2); font-size: .85rem; }
+.leaflet-popup-content { max-height: 320px; overflow-y: auto; }
