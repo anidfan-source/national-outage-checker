@@ -12,6 +12,7 @@ from reporting import LIMITATIONS, csv_bytes, report
 st.set_page_config(page_title='UK Outage Viewer', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
 st.markdown('''<style>
 [data-testid="stMetric"] {background:#f7f9fc;border:1px solid #e4e9f1;border-radius:14px;padding:12px}
+[data-testid="stMetric"] [data-testid="stMetricLabel"], [data-testid="stMetric"] [data-testid="stMetricValue"] {color:#101828!important}
 [data-testid="stSidebar"] {background:#101828} [data-testid="stSidebar"] * {color:#f8fafc}
 .eyebrow {color:#087f5b;font-weight:700;letter-spacing:.08em;font-size:.75rem;text-transform:uppercase}
 </style>''', unsafe_allow_html=True)
