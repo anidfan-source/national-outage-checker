@@ -35,6 +35,16 @@ def street_manager_configured():
     password = password or os.getenv('STREET_MANAGER_PASSWORD')
     return bool(username and password)
 
+def configure_street_manager():
+    """Expose Streamlit secrets to the collector process without logging values."""
+    try:
+        cfg = st.secrets.get('street_manager', {})
+        if cfg.get('username'): os.environ['STREET_MANAGER_USERNAME'] = str(cfg['username'])
+        if cfg.get('password'): os.environ['STREET_MANAGER_PASSWORD'] = str(cfg['password'])
+        if cfg.get('base_url'): os.environ['STREET_MANAGER_BASE_URL'] = str(cfg['base_url']).rstrip('/')
+    except Exception:
+        pass
+
 @st.cache_data(ttl=server.INTERVAL, show_spinner='Collecting public outage feeds…')
 def load_dashboard():
     server.init_db(); server.refresh(); return server.snapshot()
@@ -213,6 +223,8 @@ def weather_view():
     incident_list(records)
 def routing_view(): category_view('routing','Internet routing signals','Passive evidence of wider connectivity changes. These signals are not confirmed ISP outages.')
 def services_view(): category_view('third-party','Online services','Cloud, DNS and application issues that can resemble a home broadband problem.')
+
+configure_street_manager()
 
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
