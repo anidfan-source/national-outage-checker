@@ -42,6 +42,7 @@ def configure_street_manager():
         if cfg.get('username'): os.environ['STREET_MANAGER_USERNAME'] = str(cfg['username'])
         if cfg.get('password'): os.environ['STREET_MANAGER_PASSWORD'] = str(cfg['password'])
         if cfg.get('base_url'): os.environ['STREET_MANAGER_BASE_URL'] = str(cfg['base_url']).rstrip('/')
+        if cfg.get('api_version'): os.environ['STREET_MANAGER_API_VERSION'] = str(cfg['api_version'])
     except Exception:
         pass
 
