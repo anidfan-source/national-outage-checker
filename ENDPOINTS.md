@@ -43,8 +43,9 @@ status and traffic-management information. It sends near-real-time work events
 through AWS SNS. The subscriber supplies **its own public HTTPS POST URL** to
 `POST /api-notifications/subscribe`; it is not a Street Manager export route.
 
-For example, after deploying this application at `https://outages.example.org`,
-the same receiver can be entered for Permit, Activity and Section 58:
+For example, after deploying a compatible receiver at
+`https://outages.example.org`, the same receiver can be entered for Permit,
+Activity and Section 58:
 
 `https://outages.example.org/api/webhooks/street-manager`
 
