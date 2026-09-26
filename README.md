@@ -57,23 +57,30 @@ At initial verification, 17 of 19 feeds responded successfully; Fastly returned 
 
 Add a source in `sources.py` using `feed(...)`. Existing adapters support Statuspage JSON, Google Cloud JSON, RSS/Atom, Northern Powergrid and Environment Agency flood data. For another schema add a validated adapter in `server.parse`, with fixture tests. Provider links alone must use `kind='portal'`. Do not add invented endpoints or label a portal as a live connection. Tokens should be held server-side; authentication is not implemented for portal entries.
 
-## Street Manager credentials
+## Street Manager Open Data
 
-Street Manager credentials must not be committed to Git. The app reads them from Streamlit secrets or environment variables.
+Street Manager is integrated through the DfT Open Data **Permit** notification feed rather than API-user polling. DfT sends AWS SNS HTTPS POST messages to a separately deployed receiver in `street_manager_webhook.py`. The receiver verifies the SNS signature and the exact production Permit topic ARN before confirming subscriptions or accepting notifications, deduplicates SNS retries, and persists the embedded Permit events.
 
-For Streamlit Community Cloud, open the app settings and add the following to **Secrets**, substituting your real values:
+Deploy the included `render.yaml` as a separate web service with a persistent disk. The receiver endpoint to enter in the Street Manager Open Data onboarding form is:
+
+```
+https://YOUR-WEBHOOK-HOST/street-manager/permit
+```
+
+Do not enter the Streamlit application URL. The receiver must be directly reachable by AWS SNS over HTTPS.
+
+The webhook deployment generates/uses `STREET_MANAGER_WEBHOOK_TOKEN`. Add the receiver URL and the **same** token to the Streamlit application's Secrets:
 
 ```toml
 [street_manager]
-username = "YOUR_STREET_MANAGER_USERNAME"
-password = "YOUR_STREET_MANAGER_PASSWORD"
+webhook_url = "https://YOUR-WEBHOOK-HOST"
+webhook_token = "YOUR_SHARED_READ_TOKEN"
 ```
 
-For local/server deployments, either create `.streamlit/secrets.toml` with the same structure (it is gitignored), or set `STREET_MANAGER_USERNAME` and `STREET_MANAGER_PASSWORD` environment variables. Never add real credentials to README, source files, commits, issues, pull requests or logs.
+The old Street Manager username/password settings are no longer used by the dashboard. The read token protects the receiver's `/api/events` endpoint and must never be committed to Git.
 
-The collector now authenticates with the Street Manager v7 Work API and polls the Event API `GET /works/updates` for the preceding 24 hours. Street Manager requires an **API user**: credentials configured only for the Street Manager web frontend cannot also be used for API access. If Source Health reports a 401, confirm with Street Manager that the account has API access. A public HTTPS SNS notification receiver remains a later enhancement; polling provides reconciliation/current update evidence without it.
+Once DfT sends the SNS subscription confirmation, the receiver validates the message and automatically calls its HTTPS `SubscribeURL`. Permit notifications are then stored and exposed to the dashboard as roadworks context. They are evidence for correlation only and do not establish that roadworks caused a broadband outage.
 
-The default production host is `https://api.manage-roadworks.service.gov.uk`. For an approved sandbox API user, set `base_url = "https://api.sandbox.manage-roadworks.service.gov.uk"` under `[street_manager]`. Do not use sandbox credentials against production or production credentials for testing.
 
 ## Verify
 
