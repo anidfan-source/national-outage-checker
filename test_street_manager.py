@@ -23,6 +23,8 @@ class StreetManagerTests(unittest.TestCase):
         self.assertEqual(rows[0]['evidenceType'],'roadworks-context')
         self.assertEqual(rows[0]['region'],'High Street')
         self.assertEqual(details['organisationReference'],'ORG')
+        self.assertEqual(request.call_args_list[0].args[2]['emailAddress'],'api@example.test')
+        self.assertNotIn('username',request.call_args_list[0].args[2])
         self.assertEqual(request.call_args_list[1].kwargs['token'],'jwt')
 
     @patch.dict(os.environ,{'STREET_MANAGER_USERNAME':'api@example.test','STREET_MANAGER_PASSWORD':'placeholder','STREET_MANAGER_BASE_URL':'https://example.test'},clear=False)
