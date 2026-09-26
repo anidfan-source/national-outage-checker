@@ -20,6 +20,7 @@ import xml.etree.ElementTree as ET
 from sources import SOURCES
 from locations import enrich, reference_summary
 from public_connectors import collect_public, outdated
+from street_manager import collect_street_manager
 
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'data' / 'outages.sqlite3'
@@ -165,6 +166,9 @@ def collect(source):
     try:
         if source['kind'] in ('ssen','nged','ripe','ioda'):
             records, details = collect_public(source, fetch, event, date)
+            health.update(details)
+        elif source['kind'] == 'street-manager':
+            records, details = collect_street_manager(source, event, date)
             health.update(details)
         elif source['kind'] == 'npg':
             rows = []
