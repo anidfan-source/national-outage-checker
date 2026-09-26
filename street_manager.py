@@ -14,10 +14,20 @@ def _request(url, method='GET', body=None, token=None):
     try:
         with urllib.request.urlopen(req,timeout=18) as response: raw=response.read(8_000_001)
     except urllib.error.HTTPError as exc:
+        error_message=''
+        try:
+            payload=json.loads(exc.read(16384).decode('utf-8','replace'))
+            if isinstance(payload,dict):
+                error_message=str(payload.get('message') or payload.get('error_description') or payload.get('error') or '')[:300]
+        except Exception:
+            pass
         if exc.code==401: raise RuntimeError('Street Manager authentication/access failed (401). Confirm this is an API user, not a web UI user.') from None
         if exc.code==423: raise RuntimeError('Street Manager account temporarily locked (423). Wait at least five minutes before retrying.') from None
         if exc.code==400: raise RuntimeError('Street Manager rejected the request (400). The v7 Event API permits a maximum 12-hour start/end polling window; verify API-user access and configured API host if this persists.') from None
-        raise RuntimeError(f'Street Manager HTTP {exc.code}') from None
+        if exc.code==400:
+            detail=f': {error_message}' if error_message else ''
+            raise RuntimeError(f'Street Manager rejected the request (400){detail}') from None
+        raise RuntimeError(f'Street Manager HTTP {exc.code}'+(f': {error_message}' if error_message else '')) from None
     if len(raw)>8_000_000: raise ValueError('Street Manager response exceeds 8 MB limit')
     return json.loads(raw)
 
@@ -25,10 +35,12 @@ def authenticate():
     username=os.getenv('STREET_MANAGER_USERNAME'); password=os.getenv('STREET_MANAGER_PASSWORD')
     if not username or not password: raise RuntimeError('Street Manager credentials are not configured')
     base=os.getenv('STREET_MANAGER_BASE_URL','https://api.manage-roadworks.service.gov.uk').rstrip('/')
-    result=_request(base+'/v7/work/authenticate','POST',{'username':username,'password':password})
+    version=os.getenv('STREET_MANAGER_API_VERSION','v7').strip().lower()
+    if version not in ('v6','v7','latest'): raise RuntimeError('STREET_MANAGER_API_VERSION must be v6, v7 or latest')
+    result=_request(base+f'/{version}/work/authenticate','POST',{'username':username,'password':password})
     token=result.get('idToken') or result.get('id_token')
     if not token: raise ValueError('Street Manager authentication returned no ID token')
-    return base,token,result.get('organisationReference') or result.get('organisation_reference')
+    return base,version,token,result.get('organisationReference') or result.get('organisation_reference')
 
 def _value(row,*names):
     for name in names:
@@ -36,13 +48,13 @@ def _value(row,*names):
     return None
 
 def collect_street_manager(source,make_event,parse_date):
-    base,token,organisation=authenticate()
-    end=datetime.now(timezone.utc); start=end-timedelta(hours=12)
+    base,version,token,organisation=authenticate()
+    end=datetime.now(timezone.utc); start=end-timedelta(hours=11,minutes=59)
     params={'start_date':start.isoformat().replace('+00:00','Z'),'end_date':end.isoformat().replace('+00:00','Z'),'page_size':PAGE_SIZE}
     rows=[]; next_update=None
     for _ in range(MAX_PAGES):
         if next_update is not None: params={'update_id':next_update,'page_size':PAGE_SIZE}
-        payload=_request(base+'/v7/event/works/updates?'+urllib.parse.urlencode(params),token=token)
+        payload=_request(base+f'/{version}/event/works/updates?'+urllib.parse.urlencode(params),token=token)
         batch=payload.get('rows')
         if not isinstance(batch,list): raise ValueError('Street Manager updates response has no rows array')
         rows.extend(batch); next_update=payload.get('next_update')
@@ -63,4 +75,4 @@ def collect_street_manager(source,make_event,parse_date):
         item=make_event(source,f'{wrn}:{update_id or when or "update"}',title,when,status,desc,source['website'],region=street or source['scope'])
         item.update(evidenceType='roadworks-context',workReferenceNumber=wrn,streetManagerUpdateId=update_id,promoter=promoter,workCategory=category,trafficManagementType=traffic,attribution='Department for Transport Street Manager')
         records.append(item)
-    return list({r['id']:r for r in records}.values()),{'coverage':'Street Manager v7 work changes visible to the configured API user; preceding 12 hours.','organisationReference':organisation,'scannedCount':len(rows)}
+    return list({r['id']:r for r in records}.values()),{'coverage':'Street Manager v7 work changes visible to the configured API user; preceding 12 hours.','organisationReference':organisation,'apiVersion':version,'scannedCount':len(rows)}
