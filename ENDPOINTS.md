@@ -27,6 +27,9 @@ requirements explicit. A provider page is not treated as an API endpoint.
 | Northern Powergrid | `https://northernpowergrid.opendatasoft.com/api/explore/v2.1/catalog/datasets/live-power-cuts-data/records` | Public | Power cuts that may affect broadband equipment |
 | Met Office warnings | `https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK` | Public | Live UK severe-weather notices and impact text |
 | Environment Agency | `https://environment.data.gov.uk/flood-monitoring/id/floods` | Public | England flood warnings |
+| EA rainfall telemetry | `https://environment.data.gov.uk/flood-monitoring/data/readings?parameter=rainfall&latest` | Public OGL, no registration | Latest rainfall readings; environmental correlation, adapter pending |
+| EA river levels / flows | `https://environment.data.gov.uk/flood-monitoring/data/readings?latest` | Public OGL, no registration | Latest water level/flow readings; environmental correlation, adapter pending |
+| EA tide gauges | `https://environment.data.gov.uk/flood-monitoring/id/stations?type=TideGauge` | Public OGL, no registration | Tide-gauge stations/readings; coastal-risk context, adapter pending |
 | SSEN Power Track | `https://external.distribution.prd.ssen.co.uk/opendataportal-prd/v4/api/getallfaults` | Public | Power cuts, coordinates and affected postcodes |
 | National Grid Electricity Distribution | `https://connecteddata.nationalgrid.co.uk/api/3/action/datastore_search?resource_id=292f788f-4339-455b-8cc0-153e14509d4d` | Public | Power-cut records; upload time is checked for staleness |
 | IODA | `https://api.ioda.inetintel.cc.gatech.edu/v2/outages/events` | Public | UK-related network anomaly signals |
@@ -37,7 +40,7 @@ The Met Office public weather-warning API is a current-warning service and has
 no historic-warning endpoint. Historic warnings are available as searchable
 PDF records through the [Met Office warning archive](https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service). The supplied `NSWWS_Metadata_2026.xlsx` is bundled as 245 historic metadata records for January–August 2026; it provides original issue date, classification, weather element and named regions, but no warning validity period or geometry.
 
-## Street Manager: roadworks source
+## Street Manager v7: roadworks source
 
 Street Manager is the preferred source for England utility and highway works.
 It requires a registered account, an organisation name, contact details and an
@@ -59,7 +62,7 @@ topic ARN, automatically follow the SNS subscription confirmation URL and
 deduplicate retry deliveries. A localhost URL and `POST /permits/csv` will not
 work in the subscription form.
 
-After credentials are issued, use these Street Manager API routes:
+Street Manager v7 Event API documentation confirms the following routes. After credentials are issued, use these routes:
 
 | Operation | Route | Use in this project |
 | --- | --- | --- |
@@ -70,11 +73,7 @@ After credentials are issued, use these Street Manager API routes:
 | Forward-plan export | `POST /forward-plans/csv` | Retrieve planned works. |
 | Retrieve generated export | `GET /csv/{csvId}` | Download the CSV returned by an export request. |
 
-The routes above are documented against the Street Manager API host supplied at
-onboarding. The documentation examples use the **sandbox** host
-`https://api.sandbox.manage-roadworks.service.gov.uk`; do not point production
-polling at it. Authentication is JWT-based and the production hostname and
-permissions are provisioned to the account.
+The v7 Event API documentation is published under the sandbox documentation path `/v7/event/docs/`. The sandbox is documentation/test infrastructure, not a production data source. Production host/authentication details are supplied through Street Manager onboarding. The application therefore keeps Street Manager access-dependent until credentials and a public HTTPS notification receiver are configured.
 
 ## Sources with an account, partner agreement or licensed feed
 
