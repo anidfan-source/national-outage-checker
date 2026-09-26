@@ -64,7 +64,7 @@ def filters(data, page_categories=None):
     _,view_control,_=st.columns((1,2,1))
     with view_control:
         st.caption('SHOW INCIDENTS')
-        mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed')
+        mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
     with st.sidebar:
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
         location_query=st.text_input('Location',placeholder='0113, LS or LS1 1AA',help='Matches reported postcode areas and approximate dialling-code areas.')
