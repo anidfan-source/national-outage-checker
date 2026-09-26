@@ -33,6 +33,10 @@ requirements explicit. A provider page is not treated as an API endpoint.
 | RIPE Atlas | `https://atlas.ripe.net/api/v2/probes/` | Public | Disconnected public UK probes |
 | UK Utility Reporter | `https://www.ukutilityreporter.co.uk/api/reports?type=telecoms&limit=500` | Public, no authentication | User-submitted UK telecoms reports. The app retains only report state, postcode district and affected-count estimate; it remains unverified community evidence. |
 
+The Met Office public weather-warning API is a current-warning service and has
+no historic-warning endpoint. Historic warnings are available as searchable
+PDF records through the [Met Office warning archive](https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service), so the app links to that archive in History mode rather than presenting it as an automated feed.
+
 ## Street Manager: roadworks source
 
 Street Manager is the preferred source for England utility and highway works.

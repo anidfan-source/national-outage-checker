@@ -177,7 +177,18 @@ def sources_view():
 
 def broadband_view(): category_view('broadband','Broadband & provider notices','Direct provider notices and connectivity reports that may affect a home connection.')
 def power_view(): category_view('electricity','Power cuts & infrastructure','Power incidents can interrupt home routers, street cabinets and local network equipment.')
-def weather_view(): category_view('environment','Weather & flood impacts','Live official warnings provide impact context for faults and access disruptions.')
+def weather_view():
+    header(DATA,CATEGORY_LABELS['environment'],'Weather & flood impacts','Live official warnings provide impact context for faults and access disruptions.')
+    records,summary=filters(DATA,['environment'])
+    if summary['mode']=='history':
+        st.info('Historical results currently include Environment Agency flood warnings. The Met Office public warning API only supplies current warnings; its historic warnings are searchable PDF records, so they cannot yet be filtered or mapped here.')
+        st.link_button('Search the Met Office historic warning archive','https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service')
+    values=(len(records),len({x.get('provider') for x in records}),len({a for x in records for a in x.get('postcodeAreas',[])}))
+    for col,label,value in zip(st.columns(3),('Matching notices','Providers represented','Postcode areas mentioned'),values): col.metric(label,value)
+    left,right=st.columns((3,2))
+    with left: st.subheader('Locations'); map_records(records)
+    with right: exports(records,DATA,summary); st.caption(LIMITATIONS)
+    incident_list(records)
 def routing_view(): category_view('routing','Internet routing signals','Passive evidence of wider connectivity changes. These signals are not confirmed ISP outages.')
 def services_view(): category_view('third-party','Online services','Cloud, DNS and application issues that can resemble a home broadband problem.')
 
