@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: national-outage-street-manager
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn street_manager_webhook:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: STREET_MANAGER_WEBHOOK_TOKEN
+        generateValue: true
+      - key: STREET_MANAGER_WEBHOOK_DB
+        value: /data/street_manager.sqlite3
+    disk:
+      name: street-manager-data
+      mountPath: /data
+      sizeGB: 1
