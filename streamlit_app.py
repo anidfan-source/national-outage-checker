@@ -24,16 +24,16 @@ CATEGORY_LABELS = {'broadband':'Broadband & mobile backup','electricity':'Power 
 CLOSED = {'resolved','completed','postmortem'}
 
 def street_manager_configured():
-    """Return True when Street Manager credentials are supplied securely."""
+    """Return True when the Street Manager Open Data receiver is configured."""
     try:
         cfg = st.secrets.get('street_manager', {})
-        username = cfg.get('username')
-        password = cfg.get('password')
+        url = cfg.get('webhook_url')
+        token = cfg.get('webhook_token')
     except Exception:
-        username = password = None
-    username = username or os.getenv('STREET_MANAGER_USERNAME')
-    password = password or os.getenv('STREET_MANAGER_PASSWORD')
-    return bool(username and password)
+        url = token = None
+    url = url or os.getenv('STREET_MANAGER_WEBHOOK_URL')
+    token = token or os.getenv('STREET_MANAGER_WEBHOOK_TOKEN')
+    return bool(url and token)
 
 def configure_street_manager():
     """Expose the Open Data receiver configuration to the collector process."""
