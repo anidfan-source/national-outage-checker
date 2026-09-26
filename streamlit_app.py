@@ -8,6 +8,7 @@ import pydeck as pdk
 import streamlit as st
 import server
 from historic_flood import fetch_historic_flood_warnings
+from historic_weather import fetch_historic_weather_warnings
 from reporting import LIMITATIONS, csv_bytes, report
 
 st.set_page_config(page_title='UK Outage Viewer', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
@@ -28,6 +29,10 @@ def load_dashboard():
 @st.cache_data(ttl=86400, show_spinner='Loading historic flood warnings…')
 def load_historic_flood_warnings():
     return fetch_historic_flood_warnings()
+
+@st.cache_data(show_spinner='Loading bundled historic weather warnings…')
+def load_historic_weather_warnings():
+    return fetch_historic_weather_warnings()
 
 def text(value): return str(value or '').casefold()
 
@@ -86,9 +91,9 @@ def filters(data, page_categories=None):
     incident_data=data
     if mode=='History' and 'environment' in categories:
         try:
-            incident_data={**data,'incidents':data['incidents']+load_historic_flood_warnings()}
+            incident_data={**data,'incidents':data['incidents']+load_historic_flood_warnings()+load_historic_weather_warnings()}
         except Exception as error:
-            st.sidebar.warning(f'Historic flood archive unavailable: {type(error).__name__}')
+            st.sidebar.warning(f'Historic environmental archive unavailable: {type(error).__name__}')
     records=filtered_incidents(incident_data,categories,provider,location,query,mode,since)
     summary={'mode':mode.lower(),'categories':categories,'provider':None if provider=='All providers' else provider,'location':location_query,'locationInterpretation':message or None,'search':query,'timeWindow':'current feed records' if mode=='Live' else f'last {days} calendar days','from':None if mode=='Live' else since.isoformat(),'through':now.isoformat()}
     return records,summary
@@ -181,7 +186,7 @@ def weather_view():
     header(DATA,CATEGORY_LABELS['environment'],'Weather & flood impacts','Live official warnings provide impact context for faults and access disruptions.')
     records,summary=filters(DATA,['environment'])
     if summary['mode']=='history':
-        st.info('Historical results currently include Environment Agency flood warnings. The Met Office public warning API only supplies current warnings; its historic warnings are searchable PDF records, so they cannot yet be filtered or mapped here.')
+        st.info('Historical results include Environment Agency flood warnings and the supplied Met Office NSWWS 2026 metadata. Met Office metadata records the original issue date, warning classification, weather type and named regions; it does not include validity times or warning geometry.')
         st.link_button('Search the Met Office historic warning archive','https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service')
     values=(len(records),len({x.get('provider') for x in records}),len({a for x in records for a in x.get('postcodeAreas',[])}))
     for col,label,value in zip(st.columns(3),('Matching notices','Providers represented','Postcode areas mentioned'),values): col.metric(label,value)

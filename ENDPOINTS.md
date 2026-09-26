@@ -35,7 +35,7 @@ requirements explicit. A provider page is not treated as an API endpoint.
 
 The Met Office public weather-warning API is a current-warning service and has
 no historic-warning endpoint. Historic warnings are available as searchable
-PDF records through the [Met Office warning archive](https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service), so the app links to that archive in History mode rather than presenting it as an automated feed.
+PDF records through the [Met Office warning archive](https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service). The supplied `NSWWS_Metadata_2026.xlsx` is bundled as 245 historic metadata records for January–August 2026; it provides original issue date, classification, weather element and named regions, but no warning validity period or geometry.
 
 ## Street Manager: roadworks source
 
