@@ -28,6 +28,7 @@ feed('zen-maintenance', 'Zen Broadband maintenance', 'broadband', 'rss', 'https:
 feed('npg', 'Northern Powergrid', 'electricity', 'npg', 'https://northernpowergrid.opendatasoft.com/api/explore/v2.1/catalog/datasets/live-power-cuts-data/records', 'https://northernpowergrid.opendatasoft.com/explore/dataset/live-power-cuts-data/', 'North East England, Yorkshire and northern Lincolnshire', 'Source coordinates; power loss can interrupt routers and network equipment.')
 feed('metoffice', 'Met Office weather warnings', 'environment', 'rss', 'https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK', 'https://weather.metoffice.gov.uk/warnings-and-advice', 'UK', 'Risk context, not proof of a broadband outage. Verify warning validity at source.')
 feed('ea', 'Environment Agency flood warnings', 'environment', 'flood', 'https://environment.data.gov.uk/flood-monitoring/id/floods', 'https://check-for-flooding.service.gov.uk/', 'England', 'Environment Agency flood and river level data: Open Government Licence. Risk context, not a confirmed broadband fault.')
+feed('ea-historic', 'Environment Agency historic flood warnings', 'environment', 'portal', None, 'https://www.data.gov.uk/dataset/d4fb2591-f4dd-4e7f-9aaf-49af94437b36/historic-flood-warnings2', 'England, 2006 onwards', 'Quarterly historical download. Loaded only for environmental History views; a flood warning is risk context, not proof of a broadband fault.')
 
 # These require a location, customer session, licensed access or a bespoke adapter.
 for id, name, category, website, note in [

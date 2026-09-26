@@ -7,6 +7,7 @@ import re
 import pydeck as pdk
 import streamlit as st
 import server
+from historic_flood import fetch_historic_flood_warnings
 from reporting import LIMITATIONS, csv_bytes, report
 
 st.set_page_config(page_title='UK Outage Viewer', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
@@ -23,6 +24,10 @@ CLOSED = {'resolved','completed','postmortem'}
 @st.cache_data(ttl=server.INTERVAL, show_spinner='Collecting public outage feeds…')
 def load_dashboard():
     server.init_db(); server.refresh(); return server.snapshot()
+
+@st.cache_data(ttl=86400, show_spinner='Loading historic flood warnings…')
+def load_historic_flood_warnings():
+    return fetch_historic_flood_warnings()
 
 def text(value): return str(value or '').casefold()
 
@@ -78,7 +83,13 @@ def filters(data, page_categories=None):
         if st.button('Refresh feeds',use_container_width=True,type='primary'): load_dashboard.clear(); st.rerun()
         st.divider(); st.caption('A match is related published evidence, not a diagnosis of an individual household line.')
     now=datetime.now(timezone.utc); since=now if mode=='Live' else now.replace(hour=0,minute=0,second=0,microsecond=0)-timedelta(days=days-1)
-    records=filtered_incidents(data,categories,provider,location,query,mode,since)
+    incident_data=data
+    if mode=='History' and 'environment' in categories:
+        try:
+            incident_data={**data,'incidents':data['incidents']+load_historic_flood_warnings()}
+        except Exception as error:
+            st.sidebar.warning(f'Historic flood archive unavailable: {type(error).__name__}')
+    records=filtered_incidents(incident_data,categories,provider,location,query,mode,since)
     summary={'mode':mode.lower(),'categories':categories,'provider':None if provider=='All providers' else provider,'location':location_query,'locationInterpretation':message or None,'search':query,'timeWindow':'current feed records' if mode=='Live' else f'last {days} calendar days','from':None if mode=='Live' else since.isoformat(),'through':now.isoformat()}
     return records,summary
 
