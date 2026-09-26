@@ -25,4 +25,16 @@ class StreetManagerTests(unittest.TestCase):
         self.assertEqual(details['organisationReference'],'ORG')
         self.assertEqual(request.call_args_list[1].kwargs['token'],'jwt')
 
+    @patch.dict(os.environ,{'STREET_MANAGER_USERNAME':'api@example.test','STREET_MANAGER_PASSWORD':'placeholder','STREET_MANAGER_BASE_URL':'https://example.test'},clear=False)
+    @patch('street_manager._request')
+    def test_polling_window_is_within_event_api_limit(self,request):
+        request.side_effect=[{'idToken':'jwt'},{'rows':[],'next_update':None}]
+        collect_street_manager(self.source(),event,date)
+        from urllib.parse import urlsplit,parse_qs
+        from datetime import datetime,timedelta
+        params=parse_qs(urlsplit(request.call_args_list[1].args[0]).query)
+        start=datetime.fromisoformat(params['start_date'][0].replace('Z','+00:00'))
+        end=datetime.fromisoformat(params['end_date'][0].replace('Z','+00:00'))
+        self.assertLessEqual(end-start,timedelta(hours=12))
+
 if __name__=='__main__': unittest.main()
