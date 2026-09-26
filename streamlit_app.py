@@ -61,14 +61,17 @@ def filename(extension): return 'uk-outage-report-'+datetime.now(timezone.utc).s
 
 def filters(data, page_categories=None):
     names={source['id']:source['name'] for source in data['sources']}
+    _,view_control,_=st.columns((1,2,1))
+    with view_control:
+        st.caption('SHOW INCIDENTS')
+        mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed')
     with st.sidebar:
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
         location_query=st.text_input('Location',placeholder='0113, LS or LS1 1AA',help='Matches reported postcode areas and approximate dialling-code areas.')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
         query=st.text_input('Find a provider or issue',placeholder='Power cut, Zen, rain…')
-        mode=st.segmented_control('Time window',['Live','History'],default='Live',selection_mode='single')
-        days=st.slider('History days',1,365,30,disabled=mode=='Live')
+        days=st.slider('History days',1,365,30,disabled=mode=='Live',help='Choose History above to search earlier notices.')
         available=page_categories or list(CATEGORY_LABELS)
         categories=st.multiselect('Evidence types',available,default=available,format_func=CATEGORY_LABELS.get)
         provider=st.selectbox('Provider',['All providers']+list(names),format_func=lambda x:names.get(x,x))
@@ -119,7 +122,7 @@ def incident_list(records, title='Published evidence'):
             if item.get('url'): st.link_button('Open source',item['url'])
 
 def correlated_view():
-    records,summary=filters(DATA); header(DATA,'Overview','UK Outage Viewer','Start with a place, then compare direct provider notices with power, weather and passive network evidence.')
+    header(DATA,'Overview','UK Outage Viewer','Start with a place, then compare direct provider notices with power, weather and passive network evidence.'); records,summary=filters(DATA)
     direct=sum(item.get('evidenceType')=='provider-report' or item.get('category')=='broadband' for item in records); risks=sum(item.get('category') in ('electricity','environment') for item in records); signals=sum(item.get('evidenceType') in ('network-signal','probe-evidence') for item in records)
     for col,label,value in zip(st.columns(4),('Matching evidence','Provider reports','Power & weather context','Network signals'),(len(records),direct,risks,signals)): col.metric(label,value)
     st.subheader('What may be related'); groups=defaultdict(list)
@@ -139,7 +142,7 @@ def correlated_view():
     incident_list(records,'All matching evidence')
 
 def category_view(key,title,description):
-    records,summary=filters(DATA,[key]); header(DATA,CATEGORY_LABELS[key],title,description)
+    header(DATA,CATEGORY_LABELS[key],title,description); records,summary=filters(DATA,[key])
     values=(len(records),len({x.get('provider') for x in records}),len({a for x in records for a in x.get('postcodeAreas',[])}))
     for col,label,value in zip(st.columns(3),('Matching notices','Providers represented','Postcode areas mentioned'),values): col.metric(label,value)
     left,right=st.columns((3,2))
@@ -148,7 +151,7 @@ def category_view(key,title,description):
     incident_list(records)
 
 def sources_view():
-    records,summary=filters(DATA); header(DATA,'Data quality','Sources & connection health','See what is automated, stale or only a provider portal before relying on a result.')
+    header(DATA,'Data quality','Sources & connection health','See what is automated, stale or only a provider portal before relying on a result.'); records,summary=filters(DATA)
     states=Counter(s.get('state','unknown') for s in DATA['sources'])
     for col,state in zip(st.columns(4),('connected','stale','unavailable','portal-only')): col.metric(state.replace('-',' ').title(),states.get(state,0))
     exports(records,DATA,summary)
