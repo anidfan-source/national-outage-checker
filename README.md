@@ -71,7 +71,9 @@ password = "YOUR_STREET_MANAGER_PASSWORD"
 
 For local/server deployments, either create `.streamlit/secrets.toml` with the same structure (it is gitignored), or set `STREET_MANAGER_USERNAME` and `STREET_MANAGER_PASSWORD` environment variables. Never add real credentials to README, source files, commits, issues, pull requests or logs.
 
-These credentials only prepare authentication. Street Manager v7 ingestion additionally needs the production API details supplied during onboarding and a public HTTPS SNS notification receiver.
+The collector now authenticates with the Street Manager v7 Work API and polls the Event API `GET /works/updates` for the preceding 24 hours. Street Manager requires an **API user**: credentials configured only for the Street Manager web frontend cannot also be used for API access. If Source Health reports a 401, confirm with Street Manager that the account has API access. A public HTTPS SNS notification receiver remains a later enhancement; polling provides reconciliation/current update evidence without it.
+
+The default production host is `https://api.manage-roadworks.service.gov.uk`. For an approved sandbox API user, set `base_url = "https://api.sandbox.manage-roadworks.service.gov.uk"` under `[street_manager]`. Do not use sandbox credentials against production or production credentials for testing.
 
 ## Verify
 
