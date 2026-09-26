@@ -5,17 +5,26 @@ A local dashboard combining provider incident feeds with power outages and envir
 ## Run
 
 ```sh
+python3 -m pip install -r requirements.txt
+python3 -m streamlit run streamlit_app.py
+```
+
+This is the recommended local dashboard. It collects feeds directly and stores the normalized history in `data/outages.sqlite3`; no companion HTTP server is required. The sidebar can refresh feeds, filter records and download CSV or JSON reports.
+
+The original browser implementation remains available:
+
+```sh
 python3 server.py
 ```
 
-Open http://localhost:8000. Use `PORT=8001 python3 server.py` if port 8000 is occupied. A static `python3 -m http.server` cannot provide the live API. The server binds only to localhost; production deployment needs an appropriate server/reverse proxy and operational monitoring.
+Open the Streamlit URL it prints (normally http://localhost:8501). Use `PORT=8001 python3 server.py` for the original local browser version if port 8000 is occupied. A static `python3 -m http.server` cannot provide the live API. The server binds only to localhost; production deployment needs an appropriate server/reverse proxy and operational monitoring.
 
 ## Coverage
 
 The registry in `sources.py` contains 56 sources:
 
-- **19 automatic feeds:** Cloudflare (including its DNS services), Akamai, Fastly, Linode, DigitalOcean, GitHub, Discord, Zoom, Dropbox, Atlassian, Google Cloud, AWS, Azure, Andrews & Arnold, Zen faults, Zen maintenance, Northern Powergrid and the Met Office/Environment Agency.
-- **37 portal/access-dependent sources:** major UK fixed and mobile broadband providers, fibre altnets, satellite broadband, remaining electricity distribution operators, NESO, DNS, peering/routing measurement services, devolved flood agencies and streetworks data.
+- **23 automatic feeds:** the earlier service, power and environment feeds plus SSEN Power Track, National Grid Electricity Distribution, IODA UK-related network signals and RIPE Atlas public UK probe disconnections.
+- **33 portal/access-dependent sources:** major UK fixed and mobile broadband providers, fibre altnets, satellite broadband, remaining electricity distribution operators, NESO, DNS, peering/routing measurement services, devolved flood agencies and streetworks data.
 
 Portal-only entries are explicitly **not connected**. Their notes explain the next access or adapter requirement. Some links lead to provider help/home pages rather than a public feed. Availability is checked for automatic feeds on every collection; HTTP errors, timeouts and invalid responses appear in the source directory. There is no claim of exhaustive coverage: new providers appear, private line faults require customer information and many services have no public outage API.
 
@@ -32,6 +41,7 @@ At initial verification, 17 of 19 feeds responded successfully; Fastly returned 
 - Failed feeds retain their previous records with a **stale** label. A successful empty feed is different from an unavailable feed. On restart, persisted data remains stale until its source reconnects. Last-success timestamps are held in memory; record observation timestamps persist.
 - Live view shows current non-resolved entries including notices and planned work. History filters apply to incident start/publication dates. Undated notices remain in live view but cannot be charted. The chart always shows collected history, respecting category/provider/search filters; daily mode covers 30 days and monthly mode covers the selected number of months.
 - Telephone area codes and postcodes in incident text enrich locations and postcode-area search. No postcode-to-household correlation, account-based line diagnostics or automatic causality claims are implemented.
+- The Streamlit app caches a collection for five minutes. **Refresh feeds now** clears this cache and collects again. Streamlit report downloads contain every matching incident, not only the expanded on-screen results, along with the active filters and full source health. CSV output prefixes spreadsheet-formula-like values to prevent execution in spreadsheet programs.
 
 ## Sources and attribution
 

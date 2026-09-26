@@ -56,7 +56,8 @@ def enrich(item):
     areas = sorted(set(reported_areas + inferred_areas))
     points = []
     if item.get('lat') is not None and item.get('lng') is not None:
-        points.append(dict(lat=item['lat'], lng=item['lng'], method='source', label='Source-supplied location'))
+        points.append(dict(lat=item['lat'], lng=item['lng'], method=item.get('locationMethod', 'source'),
+                           label='Approximate RIPE Atlas probe location' if item.get('locationMethod') == 'probe-location' else 'Source-supplied location'))
     elif postcode_districts:
         for district in postcode_districts:
             points.append(dict(**DISTRICTS[district], method='postcode-district',

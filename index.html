@@ -64,6 +64,12 @@
           <label for="search">Search incidents and sources</label><input id="search" type="search" placeholder="Provider, postcode or issue" />
         </div>
 
+        <div class="control-group">
+          <h2>Export report</h2>
+          <p class="feed-detail">Download all matching records, filter settings and source health. CSV includes report, incident and source rows.</p>
+          <div class="export-actions"><button id="exportCsv" type="button" disabled>Download CSV</button><button id="exportJson" type="button" disabled>Download JSON</button></div>
+          <p id="exportStatus" class="feed-detail" role="status"></p>
+        </div>
         <div class="control-group stats-panel">
           <h2>Overview</h2>
           <div id="totals"></div>
@@ -87,6 +93,7 @@
       integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
       crossorigin=""
     ></script>
+    <script src="reports.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

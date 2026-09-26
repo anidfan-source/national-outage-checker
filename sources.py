@@ -70,3 +70,22 @@ for id, name, category, website, note in [
  ('one-network','one.network roadworks','environment','https://one.network/','Streetworks and cable-damage risk; licensed data integration needed.'),
 ]:
     feed(id,name,category,'portal',None,website,'See provider coverage',note)
+
+# Verified public APIs replace the portal placeholders, retaining stable source IDs.
+PUBLIC_CONNECTORS = {
+    'ssen': dict(kind='ssen', url='https://external.distribution.prd.ssen.co.uk/opendataportal-prd/v4/api/getallfaults',
+        scope='Northern Scotland and central southern England',
+        note='SSEN Power Track open data (CC BY 4.0). Published fault coordinates and affected postcodes; estimates are not restoration confirmation.'),
+    'nged': dict(kind='nged', url='https://connecteddata.nationalgrid.co.uk/api/3/action/datastore_search?resource_id=292f788f-4339-455b-8cc0-153e14509d4d',
+        scope='Midlands, South West England and south Wales',
+        note='NGED Connected Data Portal / NGED Open Data Licence. Source upload time is checked; old snapshots remain stale even when the API responds.'),
+    'ioda': dict(kind='ioda', url='https://api.ioda.inetintel.cc.gatech.edu/v2/outages/events',
+        scope='UK-related networks and regions; last 24 hours',
+        note='IODA / Georgia Tech network anomaly signals. Signals can overlap and do not confirm an individual broadband fault.'),
+    'ripe': dict(name='RIPE Atlas UK probe evidence', kind='ripe', url='https://atlas.ripe.net/api/v2/probes/',
+        scope='Public UK probes disconnected within the last 24 hours',
+        note='RIPE NCC Atlas public probe status. Disconnection may be local power, probe maintenance or connectivity; approximate probe locations are not household fault locations. No active tests are launched.'),
+}
+for source in SOURCES:
+    if source['id'] in PUBLIC_CONNECTORS:
+        source.update(PUBLIC_CONNECTORS[source['id']])

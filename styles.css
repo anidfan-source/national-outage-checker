@@ -254,3 +254,7 @@ label[for="sourceFilter"], label[for="search"] { display: block; margin-top: 14p
 label[for="locationFilter"] { display: block; margin-top: 14px; }
 .location-detail { color: var(--accent-2); font-size: .85rem; }
 .leaflet-popup-content { max-height: 320px; overflow-y: auto; }
+.export-actions { display: flex; gap: 8px; }
+.export-actions button { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--panel-alt); color: var(--text); cursor: pointer; }
+.export-actions button:disabled { opacity: .45; cursor: wait; }
+.badge.stale { color: #f1cf7d; background: #433917; }
