@@ -39,11 +39,27 @@ It requires a registered account, an organisation name, contact details and an
 API endpoint during onboarding. Do not use a consumer map scrape as a substitute.
 
 The service supplies work location coordinates, promoter organisation, timing,
-status and traffic-management information. After credentials are issued, use:
+status and traffic-management information. It sends near-real-time work events
+through AWS SNS. The subscriber supplies **its own public HTTPS POST URL** to
+`POST /api-notifications/subscribe`; it is not a Street Manager export route.
+
+For example, after deploying this application at `https://outages.example.org`,
+the same receiver can be entered for Permit, Activity and Section 58:
+
+`https://outages.example.org/api/webhooks/street-manager`
+
+That receiver must validate the AWS SNS signature, check the Street Manager
+topic ARN, automatically follow the SNS subscription confirmation URL and
+deduplicate retry deliveries. A localhost URL and `POST /permits/csv` will not
+work in the subscription form.
+
+After credentials are issued, use these Street Manager API routes:
 
 | Operation | Route | Use in this project |
 | --- | --- | --- |
-| Work updates | `GET /works/updates` | Incrementally ingest changed works; retain only telecom promoters and nearby works. |
+| Notification subscription | `POST /api-notifications/subscribe` | Register the project's public HTTPS receiver; use this for normal ingestion. |
+| Work updates | `GET /works/updates` | Reconcile missed notifications or onboard historical data; do not use as the routine feed. |
+| Work details | `POST /permits/search` | Request detail for works identified by an event. |
 | Permit export | `POST /permits/csv` | Request a permit export where the account role permits it. |
 | Forward-plan export | `POST /forward-plans/csv` | Retrieve planned works. |
 | Retrieve generated export | `GET /csv/{csvId}` | Download the CSV returned by an export request. |
