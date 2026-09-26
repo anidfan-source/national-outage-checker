@@ -57,6 +57,22 @@ At initial verification, 17 of 19 feeds responded successfully; Fastly returned 
 
 Add a source in `sources.py` using `feed(...)`. Existing adapters support Statuspage JSON, Google Cloud JSON, RSS/Atom, Northern Powergrid and Environment Agency flood data. For another schema add a validated adapter in `server.parse`, with fixture tests. Provider links alone must use `kind='portal'`. Do not add invented endpoints or label a portal as a live connection. Tokens should be held server-side; authentication is not implemented for portal entries.
 
+## Street Manager credentials
+
+Street Manager credentials must not be committed to Git. The app reads them from Streamlit secrets or environment variables.
+
+For Streamlit Community Cloud, open the app settings and add the following to **Secrets**, substituting your real values:
+
+```toml
+[street_manager]
+username = "YOUR_STREET_MANAGER_USERNAME"
+password = "YOUR_STREET_MANAGER_PASSWORD"
+```
+
+For local/server deployments, either create `.streamlit/secrets.toml` with the same structure (it is gitignored), or set `STREET_MANAGER_USERNAME` and `STREET_MANAGER_PASSWORD` environment variables. Never add real credentials to README, source files, commits, issues, pull requests or logs.
+
+These credentials only prepare authentication. Street Manager v7 ingestion additionally needs the production API details supplied during onboarding and a public HTTPS SNS notification receiver.
+
 ## Verify
 
 ```sh
