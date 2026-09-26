@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>UK Outage Viewer</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="header-block">
+          <p class="eyebrow">National outage intelligence</p>
+          <h1>UK Outage Viewer</h1>
+          <p class="subhead">
+            Historical and live view of issues affecting home broadband, power, and third-party services.
+          </p>
+        </div>
+
+        <div class="control-group">
+          <h2>Filters</h2><div id="extraFilters"></div>
+          <label class="checkbox-row">
+            <input type="checkbox" value="broadband" checked />
+            <span>Broadband</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" value="electricity" checked />
+            <span>Electricity</span>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" value="third-party" checked />
+            <span>Third-party</span>
+          </label>
+        </div>
+
+        <div class="control-group">
+          <h2>Time window</h2>
+          <label for="viewMode">View</label>
+          <select id="viewMode">
+            <option value="day">Day (last 30 days)</option>
+            <option value="month" selected>Month</option>
+          </select>
+
+          <label for="monthRange">Last 12 months</label>
+          <input id="monthRange" type="range" min="1" max="12" value="12" />
+          <div class="range-label">
+            <span>1</span>
+            <strong id="rangeValue">12 months</strong>
+            <span>12</span>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <h2>View mode</h2>
+          <button id="liveToggle" class="primary-btn" type="button" aria-pressed="true">Live view · switch to history</button>
+          <label for="sourceFilter">Provider</label><select id="sourceFilter"><option value="">All providers</option></select>
+          <label for="search">Search incidents and sources</label><input id="search" type="search" placeholder="Provider, postcode or issue" />
+        </div>
+
+        <div class="control-group stats-panel">
+          <h2>Overview</h2>
+          <div id="totals"></div>
+        </div>
+      </aside>
+
+      <main class="map-panel">
+        <section class="status-banner"><strong id="connectionStatus" role="status">Connecting to feeds…</strong><p>Provider reports and potential risks, not a diagnosis of your home connection. Global incidents may not affect the UK. Only source-supplied coordinates appear on the map.</p><p id="mapStatus"></p></section>
+        <div id="map"></div>
+        <div class="timeline-panel">
+          <h2 id="trendTitle">Incident trend</h2>
+          <div id="timeline"></div>
+        </div>
+      <section class="content-panel"><h2>Incidents &amp; risk notices</h2><p id="incidentSummary"></p><div id="incidents" aria-live="polite"></div><button id="showMore" type="button" hidden>Show more incidents</button></section>
+        <section class="content-panel"><h2>Data connections</h2><p id="sourceSummary"></p><p>Connected means the feed was fetched successfully. It does not mean the provider is fault-free. Portal-only entries are links, not automated connections.</p><div id="sources"></div></section>
+      </main>
+    </div>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script src="app.js"></script>
+  </body>
+</html>

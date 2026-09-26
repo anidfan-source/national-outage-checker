@@ -1,0 +1,72 @@
+"""Explicit source registry; portal entries are never presented as connected feeds."""
+SOURCES = []
+
+def feed(id, name, category, kind, url, website=None, scope='Global / UK impact unconfirmed', note=''):
+    SOURCES.append(dict(id=id, name=name, category=category, kind=kind, url=url,
+                        website=website or url, scope=scope, note=note))
+
+for id, name, host in [
+    ('cloudflare', 'Cloudflare / 1.1.1.1', 'www.cloudflarestatus.com'),
+    ('akamai', 'Akamai CDN', 'www.akamaistatus.com'),
+    ('fastly', 'Fastly CDN', 'status.fastly.com'),
+    ('linode', 'Akamai Connected Cloud / Linode', 'status.linode.com'),
+    ('digitalocean', 'DigitalOcean', 'status.digitalocean.com'),
+    ('github', 'GitHub', 'www.githubstatus.com'),
+    ('discord', 'Discord', 'discordstatus.com'),
+    ('zoom', 'Zoom', 'status.zoom.us'),
+    ('dropbox', 'Dropbox', 'status.dropbox.com'),
+    ('atlassian', 'Atlassian', 'status.atlassian.com'),
+]:
+    feed(id, name, 'third-party', 'statuspage', f'https://{host}/api/v2/incidents.json', f'https://{host}',
+         note='Service disruption may affect websites or apps; does not establish a home line fault.')
+feed('gcp', 'Google Cloud', 'third-party', 'google', 'https://status.cloud.google.com/incidents.json', 'https://status.cloud.google.com')
+feed('aws', 'Amazon Web Services', 'third-party', 'rss', 'https://status.aws.amazon.com/rss/all.rss', 'https://health.aws.amazon.com/health/status')
+feed('azure', 'Microsoft Azure', 'third-party', 'rss', 'https://status.azure.com/en-us/status/feed/', 'https://azure.status.microsoft/en-us/status/')
+feed('aa', 'Andrews & Arnold', 'broadband', 'rss', 'https://aastatus.net/atom.cgi', 'https://aastatus.net', 'UK provider / location unspecified')
+feed('zen', 'Zen Broadband faults', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-faults-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified')
+feed('zen-maintenance', 'Zen Broadband maintenance', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-maintenance-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified', 'Planned work notices; check provider for current status.')
+feed('npg', 'Northern Powergrid', 'electricity', 'npg', 'https://northernpowergrid.opendatasoft.com/api/explore/v2.1/catalog/datasets/live-power-cuts-data/records', 'https://northernpowergrid.opendatasoft.com/explore/dataset/live-power-cuts-data/', 'North East England, Yorkshire and northern Lincolnshire', 'Source coordinates; power loss can interrupt routers and network equipment.')
+feed('metoffice', 'Met Office weather warnings', 'environment', 'rss', 'https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK', 'https://weather.metoffice.gov.uk/warnings-and-advice', 'UK', 'Risk context, not proof of a broadband outage. Verify warning validity at source.')
+feed('ea', 'Environment Agency flood warnings', 'environment', 'flood', 'https://environment.data.gov.uk/flood-monitoring/id/floods', 'https://check-for-flooding.service.gov.uk/', 'England', 'Environment Agency flood and river level data: Open Government Licence. Risk context, not a confirmed broadband fault.')
+
+# These require a location, customer session, licensed access or a bespoke adapter.
+for id, name, category, website, note in [
+ ('openreach','Openreach','broadband','https://www.openreach.com/','Wholesale access network; customer line diagnostics through your ISP.'),
+ ('bt','BT','broadband','https://www.bt.com/help/check-service-status','Address/account service checker.'),
+ ('ee','EE','broadband','https://ee.co.uk/help','Broadband and mobile backup; address/account checker.'),
+ ('plusnet','Plusnet','broadband','https://www.plus.net/help/','Customer service status and line diagnostics.'),
+ ('sky','Sky Broadband','broadband','https://www.sky.com/help/servicestatus','Customer service checker.'),
+ ('virgin','Virgin Media','broadband','https://www.virginmedia.com/help/service-status','Postcode/account service checker.'),
+ ('talktalk','TalkTalk','broadband','https://community.talktalk.co.uk/','Service centre and customer line testing.'),
+ ('vodafone','Vodafone','broadband','https://www.vodafone.co.uk/network/status-checker','Location checker; fixed broadband and mobile backup.'),
+ ('o2','O2 mobile backup','broadband','https://status.o2.co.uk/','Location-based mobile network status.'),
+ ('three','Three / 5G home broadband','broadband','https://www.three.co.uk/support/network-and-coverage/network-support','Location-based mobile and fixed wireless status.'),
+ ('cityfibre','CityFibre','broadband','https://cityfibre.com/','Wholesale fault details via retail ISP.'),
+ ('hyperoptic','Hyperoptic','broadband','https://www.hyperoptic.com/help/','Building/customer-specific status.'),
+ ('gigaclear','Gigaclear','broadband','https://gigaclear.com/','Local fibre network; provider checker.'),
+ ('kcom','KCOM','broadband','https://www.kcom.com/','Hull and East Yorkshire; provider service status.'),
+ ('b4rn','B4RN','broadband','https://b4rn.org.uk/','Rural fibre network; provider status.'),
+ ('communityfibre','Community Fibre','broadband','https://communityfibre.co.uk/','Provider help and network status.'),
+ ('gnetwork','G.Network','broadband','https://www.g.network/','Provider help and network status.'),
+ ('toob','toob','broadband','https://www.toob.co.uk/','Provider help and network status.'),
+ ('idnet','IDNet','broadband','https://status.idnet.com/','Public status portal; feed adapter not verified.'),
+ ('starlink','Starlink satellite broadband','broadband','https://www.starlink.com/support','Customer terminal/app diagnostics; no connected public outage feed.'),
+ ('ukpn','UK Power Networks','electricity','https://ukpowernetworks.opendatasoft.com/explore/dataset/ukpn-national-energy-outage/','Open Data registration/access required for National Energy Outage data; adapter pending.'),
+ ('ssen','SSEN Distribution','electricity','https://powertrack.ssen.co.uk/powertrack','Northern Scotland and southern England; outage map.'),
+ ('spen','SP Energy Networks','electricity','https://www.spenergynetworks.co.uk/pages/power_cuts.aspx','Central/southern Scotland, Merseyside and north Wales; outage portal.'),
+ ('nged','National Grid Electricity Distribution','electricity','https://powercuts.nationalgrid.co.uk/','Midlands, South West England and south Wales; formerly Western Power Distribution.'),
+ ('enwl','Electricity North West','electricity','https://www.enwl.co.uk/power-cuts/','North West England; outage portal.'),
+ ('nie','NIE Networks','electricity','https://powercheck.nienetworks.co.uk/','Northern Ireland; outage portal.'),
+ ('neso','NESO','electricity','https://www.neso.energy/data-portal','Grid context; not a household power-cut feed.'),
+ ('quad9','Quad9 DNS','third-party','https://status.quad9.net/','DNS resolver status; bespoke feed adapter needed.'),
+ ('m365','Microsoft 365','third-party','https://status.cloud.microsoft/','Public status and tenant-specific authenticated service health.'),
+ ('linx','LINX internet exchange','routing','https://www.linx.net/','Peering and exchange context; member incident access may be required.'),
+ ('ripe','RIPE Atlas / RIS','routing','https://atlas.ripe.net/','Measurement and routing APIs require target ASNs/probes and interpretation; not connected.'),
+ ('ioda','IODA internet outages','routing','https://ioda.inetintel.cc.gatech.edu/','Regional/ASN outage signals; custom adapter and UK network mapping needed.'),
+ ('radar','Cloudflare Radar','routing','https://radar.cloudflare.com/','Traffic anomaly context; API token and custom adapter needed.'),
+ ('sepa','SEPA flood warnings','environment','https://floodline.sepa.org.uk/floodupdates/','Scotland flood risk portal; adapter pending.'),
+ ('nrw','Natural Resources Wales floods','environment','https://flood-warning.naturalresources.wales/','Wales flood risk portal; adapter pending.'),
+ ('ni-flood','Northern Ireland flood information','environment','https://www.nidirect.gov.uk/articles/check-risk-flooding-your-area','Northern Ireland flood risk information; adapter pending.'),
+ ('one-network','one.network roadworks','environment','https://one.network/','Streetworks and cable-damage risk; licensed data integration needed.'),
+]:
+    feed(id,name,category,'portal',None,website,'See provider coverage',note)
