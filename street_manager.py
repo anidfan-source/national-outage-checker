@@ -23,7 +23,6 @@ def _request(url, method='GET', body=None, token=None):
             pass
         if exc.code==401: raise RuntimeError('Street Manager authentication/access failed (401). Confirm this is an API user, not a web UI user.') from None
         if exc.code==423: raise RuntimeError('Street Manager account temporarily locked (423). Wait at least five minutes before retrying.') from None
-        if exc.code==400: raise RuntimeError('Street Manager rejected the request (400). The v7 Event API permits a maximum 12-hour start/end polling window; verify API-user access and configured API host if this persists.') from None
         if exc.code==400:
             detail=f': {error_message}' if error_message else ''
             raise RuntimeError(f'Street Manager rejected the request (400){detail}') from None
