@@ -36,7 +36,7 @@ def authenticate():
     base=os.getenv('STREET_MANAGER_BASE_URL','https://api.manage-roadworks.service.gov.uk').rstrip('/')
     version=os.getenv('STREET_MANAGER_API_VERSION','v7').strip().lower()
     if version not in ('v6','v7','latest'): raise RuntimeError('STREET_MANAGER_API_VERSION must be v6, v7 or latest')
-    result=_request(base+f'/{version}/work/authenticate','POST',{'username':username,'password':password})
+    result=_request(base+f'/{version}/work/authenticate','POST',{'emailAddress':username,'password':password})
     token=result.get('idToken') or result.get('id_token')
     if not token: raise ValueError('Street Manager authentication returned no ID token')
     return base,version,token,result.get('organisationReference') or result.get('organisation_reference')
