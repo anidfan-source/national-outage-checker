@@ -59,145 +59,52 @@ def report(records, sources, filters, collection_at, backend_available=True):
 def _value(value):
     if value is None:
         return ''
-    if is…3063 tokens truncated…) for x in data['incidents']]
-    if kind == 'google':
-        if not isinstance(data, list):
-            raise ValueError('Expected Google incident list')
-        return [event(source, x['id'], x.get('external_desc'), x.get('begin'), 'resolved' if x.get('end') else 'investigating',
-                      (x.get('updates') or [{}])[0].get('text', ''),
-                      'https://status.cloud.google.com/incidents/' + x['id']) for x in data]
-    if kind == 'flood':
-        if not isinstance(data.get('items'), list):
-            raise ValueError('Missing flood items')
-        return [event(source, x.get('floodAreaID') or x['@id'], x.get('description'), x.get('timeRaised'),
-                      'resolved' if x.get('severityLevel') == 4 else 'warning', x.get('message'),
-                      source['website'], region=x.get('eaAreaName') or source['scope']) for x in data['items']]
-    if kind == 'npg':
-        if not isinstance(data.get('results'), list):
-            raise ValueError('Missing power cut records')
-        result = []
-        for x in data['results']:
-            started = date(x.get('loggedtime'))
-            status = 'scheduled' if started and started > now() else 'reported'
-            result.append(event(source, x.get('reference') or x['id'], x.get('natureofoutage') or 'Power cut', started,
-                                status, f"{x.get('reason') or ''} {x.get('customerstagesequencemessage') or ''} Customers: {x.get('totalconfirmedpowercut', 'unknown')}. Estimated restoration: {x.get('estimatedtimetillresolution') or 'unknown'}.",
-                                source['website'], x.get('lat'), x.get('lng'), ', '.join(x.get('postcode') or []) or x.get('area')))
-        return result
-    raise ValueError('Unknown adapter')
+    if isinstance(value, (list, dict)):
+        value = json.dumps(value, ensure_ascii=False, separators=(',', ':'))
+    value = str(value)
+    # Spreadsheet applications can otherwise execute a formula supplied by an upstream feed.
+    return "'" + value if value.lstrip().startswith(('=', '+', '-', '@')) else value
 
-def collect(source):
-    health = {**source, 'state': 'portal-only', 'checkedAt': None, 'error': None, 'count': 0}
-    if source['kind'] == 'portal':
-        return health, None
-    health['checkedAt'] = now()
-    try:
-        if source['kind'] in ('ssen','nged','ripe','ioda'):
-            records, details = collect_public(source, fetch, event, date)
-            health.update(details)
-        elif source['kind'] == 'npg':
-            rows = []
-            for offset in range(0, 10000, 100):
-                data = json.loads(fetch(source['url'] + f'?limit=100&offset={offset}'))
-                rows.extend(data['results'])
-                if len(rows) >= data['total_count']:
-                    break
-            else:
-                raise ValueError('Power feed exceeds pagination limit; refusing partial snapshot')
-            records = parse(source, json.dumps({'results': rows}))
-        elif source['kind'] == 'statuspage':
-            records = parse(source, fetch(source['url']))
-            # The history endpoint is capped; separately fetch all unresolved incidents.
-            active = parse(source, fetch(source['url'].replace('/incidents.json', '/incidents/unresolved.json')))
-            records = list({item['id']: item for item in records + active}.values())
-        else:
-            records = parse(source, fetch(source['url']))
-        health.update(state='stale' if health.get('dataStale') else 'connected', count=len(records), lastSuccess=now())
-        return health, records
-    except Exception as exc:
-        health.update(state='unavailable', error=f'{type(exc).__name__}: {exc}'[:250])
-        return health, None
 
-@contextmanager
-def database():
-    conn = sqlite3.connect(DB)
-    try:
-        with conn:
-            yield conn
-    finally:
-        conn.close()
-
-def init_db():
-    DB.parent.mkdir(exist_ok=True)
-    with database() as conn:
-        conn.execute('CREATE TABLE IF NOT EXISTS incidents (id TEXT PRIMARY KEY, source TEXT, seen TEXT, current INTEGER, body TEXT)')
-
-def refresh():
-    global STATE
-    with LOCK:
-        STATE['refreshing'] = True
-        previous = {s['id']: s for s in STATE['sources']}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        results = list(pool.map(collect, SOURCES))
-    with database() as conn:
-        for health, records in results:
-            if records is None:
-                health['lastSuccess'] = previous.get(health['id'], {}).get('lastSuccess')
-                continue
-            conn.execute('UPDATE incidents SET current=0 WHERE source=?', (health['id'],))
-            for item in records:
-                conn.execute('INSERT OR REPLACE INTO incidents VALUES (?,?,?,?,?)',
-                             (item['id'], health['id'], item['observedAt'], 1, json.dumps(item)))
-        conn.execute('DELETE FROM incidents WHERE seen < ?', ((datetime.now(timezone.utc) - timedelta(days=366)).isoformat(),))
-    with LOCK:
-        STATE = dict(sources=[h for h, _ in results], updatedAt=now(), refreshing=False)
-
-def snapshot():
-    with LOCK:
-        state = json.loads(json.dumps(STATE))
-    health = {s['id']: s for s in state['sources']}
-    with database() as conn:
-        rows = conn.execute('SELECT source,current,body FROM incidents').fetchall()
-    state['incidents'] = [{**enrich(json.loads(body)), 'current': bool(current),
-                           'stale': health.get(source, {}).get('state') != 'connected' or outdated(json.loads(body).get('sourceUpdatedAt'), date)} for source, current, body in rows]
-    state['locationReference'] = reference_summary()
-    state['pollSeconds'] = INTERVAL
-    return state
-
-def worker():
-    while True:
-        try:
-            refresh()
-        except Exception as exc:
-            print(f'Refresh failed: {exc}', flush=True)
-            with LOCK:
-                STATE['refreshing'] = False
-        time.sleep(INTERVAL)
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        path = urllib.parse.urlsplit(self.path).path
-        if path == '/api/dashboard':
-            payload, mime = json.dumps(snapshot()).encode(), 'application/json'
-        elif path in ('/', '/index.html', '/app.js', '/reports.js', '/styles.css'):
-            name = 'index.html' if path == '/' else path[1:]
-            payload = (ROOT / name).read_bytes()
-            mime = {'html': 'text/html', 'js': 'text/javascript', 'css': 'text/css'}[name.rsplit('.', 1)[1]]
-        else:
-            self.send_error(404)
-            return
-        self.send_response(200)
-        self.send_header('Content-Type', mime + '; charset=utf-8')
-        self.send_header('Content-Length', str(len(payload)))
-        self.send_header('Cache-Control', 'no-store')
-        self.send_header('X-Content-Type-Options', 'nosniff')
-        self.end_headers()
-        self.wfile.write(payload)
-
-if __name__ == '__main__':
-    init_db()
-    STATE['sources'] = [{**s, 'state': 'portal-only' if s['kind'] == 'portal' else 'pending'} for s in SOURCES]
-    port = int(os.environ.get('PORT', '8000'))
-    httpd = ThreadingHTTPServer(('127.0.0.1', port), Handler)
-    threading.Thread(target=worker, daemon=True).start()
-    print(f'UK Outage Viewer: http://localhost:{port}', flush=True)
-    httpd.serve_forever()
+def csv_bytes(payload):
+    """Return UTF-8 BOM CSV containing the report header, incidents and source health."""
+    rows = [{
+        'record_type': 'report', 'generated_at': payload['generatedAt'],
+        'collection_at': payload['collectedAt'], 'backend_available': payload['backendAvailable'],
+        'filters': payload['filters'], 'record_count': payload['summary']['recordCount'],
+        'attribution': payload['locationAttribution'], 'limitations': payload['limitations'],
+    }]
+    for item in payload['incidents']:
+        rows.append({
+            'record_type': 'incident', 'generated_at': payload['generatedAt'],
+            'collection_at': payload['collectedAt'], 'backend_available': payload['backendAvailable'],
+            'id': item.get('id'), 'provider': item.get('provider'), 'category': item.get('category'),
+            'evidence_type': item.get('evidenceType', 'provider-notice'), 'title': item.get('title'),
+            'status': item.get('status'), 'reported_at': item.get('date'), 'last_fetched_at': item.get('observedAt'),
+            'source_updated_at': item.get('sourceUpdatedAt'), 'stale': item.get('stale'), 'region': item.get('region'),
+            'reported_postcode_areas': item.get('reportedPostcodeAreas'),
+            'inferred_postcode_areas': item.get('inferredPostcodeAreas'),
+            'telephone_codes': [code.get('code') for code in item.get('telephoneAreas', [])],
+            'location_methods': [point.get('method') for point in item.get('locationPoints', [])],
+            'location_points': item.get('locationPoints'), 'location_conflict': item.get('locationConflict'),
+            'customers_affected': item.get('customersAffected'),
+            'estimated_restoration_at': item.get('estimatedRestorationAt'), 'source_url': item.get('url'),
+            'description': item.get('description'), 'attribution': item.get('attribution'),
+            'limitations': payload['limitations'],
+        })
+    for source in payload['sources']:
+        rows.append({
+            'record_type': 'source', 'generated_at': payload['generatedAt'],
+            'collection_at': payload['collectedAt'], 'backend_available': payload['backendAvailable'],
+            'id': source.get('id'), 'provider': source.get('name'), 'category': source.get('category'),
+            'source_state': source.get('state'), 'source_error': source.get('error'),
+            'last_success_at': source.get('lastSuccess'), 'last_fetched_at': source.get('checkedAt'),
+            'source_updated_at': source.get('sourceUpdatedAt'), 'source_url': source.get('website'),
+            'description': source.get('note'), 'attribution': source.get('attribution'),
+            'limitations': payload['limitations'],
+        })
+    output = io.StringIO(newline='')
+    writer = csv.DictWriter(output, fieldnames=COLUMNS, extrasaction='ignore', lineterminator='\r\n')
+    writer.writeheader()
+    writer.writerows({key: _value(value) for key, value in row.items()} for row in rows)
+    return ('\ufeff' + output.getvalue()).encode('utf-8')

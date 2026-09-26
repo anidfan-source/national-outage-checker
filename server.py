@@ -19,6 +19,7 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from sources import SOURCES
 from locations import enrich, reference_summary
+from public_connectors import collect_public, outdated
 
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'data' / 'outages.sqlite3'
@@ -126,7 +127,10 @@ def collect(source):
         return health, None
     health['checkedAt'] = now()
     try:
-        if source['kind'] == 'npg':
+        if source['kind'] in ('ssen','nged','ripe','ioda'):
+            records, details = collect_public(source, fetch, event, date)
+            health.update(details)
+        elif source['kind'] == 'npg':
             rows = []
             for offset in range(0, 10000, 100):
                 data = json.loads(fetch(source['url'] + f'?limit=100&offset={offset}'))
@@ -143,7 +147,7 @@ def collect(source):
             records = list({item['id']: item for item in records + active}.values())
         else:
             records = parse(source, fetch(source['url']))
-        health.update(state='connected', count=len(records), lastSuccess=now())
+        health.update(state='stale' if health.get('dataStale') else 'connected', count=len(records), lastSuccess=now())
         return health, records
     except Exception as exc:
         health.update(state='unavailable', error=f'{type(exc).__name__}: {exc}'[:250])
@@ -190,7 +194,7 @@ def snapshot():
     with database() as conn:
         rows = conn.execute('SELECT source,current,body FROM incidents').fetchall()
     state['incidents'] = [{**enrich(json.loads(body)), 'current': bool(current),
-                           'stale': health.get(source, {}).get('state') != 'connected'} for source, current, body in rows]
+                           'stale': health.get(source, {}).get('state') != 'connected' or outdated(json.loads(body).get('sourceUpdatedAt'), date)} for source, current, body in rows]
     state['locationReference'] = reference_summary()
     state['pollSeconds'] = INTERVAL
     return state
@@ -210,7 +214,7 @@ class Handler(BaseHTTPRequestHandler):
         path = urllib.parse.urlsplit(self.path).path
         if path == '/api/dashboard':
             payload, mime = json.dumps(snapshot()).encode(), 'application/json'
-        elif path in ('/', '/index.html', '/app.js', '/styles.css'):
+        elif path in ('/', '/index.html', '/app.js', '/reports.js', '/styles.css'):
             name = 'index.html' if path == '/' else path[1:]
             payload = (ROOT / name).read_bytes()
             mime = {'html': 'text/html', 'js': 'text/javascript', 'css': 'text/css'}[name.rsplit('.', 1)[1]]
