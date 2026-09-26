@@ -16,6 +16,7 @@ def _request(url, method='GET', body=None, token=None):
     except urllib.error.HTTPError as exc:
         if exc.code==401: raise RuntimeError('Street Manager authentication/access failed (401). Confirm this is an API user, not a web UI user.') from None
         if exc.code==423: raise RuntimeError('Street Manager account temporarily locked (423). Wait at least five minutes before retrying.') from None
+        if exc.code==400: raise RuntimeError('Street Manager rejected the request (400). The v7 Event API permits a maximum 12-hour start/end polling window; verify API-user access and configured API host if this persists.') from None
         raise RuntimeError(f'Street Manager HTTP {exc.code}') from None
     if len(raw)>8_000_000: raise ValueError('Street Manager response exceeds 8 MB limit')
     return json.loads(raw)
@@ -36,7 +37,7 @@ def _value(row,*names):
 
 def collect_street_manager(source,make_event,parse_date):
     base,token,organisation=authenticate()
-    end=datetime.now(timezone.utc); start=end-timedelta(hours=24)
+    end=datetime.now(timezone.utc); start=end-timedelta(hours=12)
     params={'start_date':start.isoformat().replace('+00:00','Z'),'end_date':end.isoformat().replace('+00:00','Z'),'page_size':PAGE_SIZE}
     rows=[]; next_update=None
     for _ in range(MAX_PAGES):
@@ -62,4 +63,4 @@ def collect_street_manager(source,make_event,parse_date):
         item=make_event(source,f'{wrn}:{update_id or when or "update"}',title,when,status,desc,source['website'],region=street or source['scope'])
         item.update(evidenceType='roadworks-context',workReferenceNumber=wrn,streetManagerUpdateId=update_id,promoter=promoter,workCategory=category,trafficManagementType=traffic,attribution='Department for Transport Street Manager')
         records.append(item)
-    return list({r['id']:r for r in records}.values()),{'coverage':'Street Manager v7 work changes visible to the configured API user; preceding 24 hours.','organisationReference':organisation,'scannedCount':len(rows)}
+    return list({r['id']:r for r in records}.values()),{'coverage':'Street Manager v7 work changes visible to the configured API user; preceding 12 hours.','organisationReference':organisation,'scannedCount':len(rows)}
