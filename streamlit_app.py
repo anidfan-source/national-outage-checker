@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import re
 
+import pydeck as pdk
 import streamlit as st
 import server
 from reporting import LIMITATIONS, csv_bytes, report
@@ -88,8 +89,15 @@ def exports(records, data, summary):
     b.download_button('Export filtered JSON',json.dumps(payload,ensure_ascii=False,indent=2),filename('json'),'application/json',use_container_width=True)
 
 def map_records(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title')} for item in records for p in item.get('locationPoints',[])]
-    if points: st.map(points,latitude='lat',longitude='lon',size=20)
+    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    if points:
+        chart=pdk.Deck(
+            initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.1,min_zoom=4.5,max_zoom=12,pitch=0),
+            layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=8500,get_fill_color='[18, 104, 166, 190]',pickable=True)],
+            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{type}'},
+            map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+        )
+        st.pydeck_chart(chart,width='stretch')
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
 def incident_list(records, title='Published evidence'):
