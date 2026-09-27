@@ -111,6 +111,9 @@ PUBLIC_CONNECTORS = {
     'gigaclear': dict(kind='statuspage', url='https://gigaclearltd.statuspage.io/api/v2/incidents.json',
         scope='Rural England full-fibre network',
         note='Gigaclear public status-page incidents. Provider notices are useful context but do not diagnose an individual household connection.'),
+    'radar': dict(kind='radar', url='https://api.cloudflare.com/client/v4/radar/annotations/outages',
+        scope='Cloudflare-verified UK Internet outages; preceding seven days',
+        note='Cloudflare Radar Outage Center evidence (CC BY-NC 4.0). Requires a read-only Account > Radar API token stored as CLOUDFLARE_API_TOKEN.'),
 }
 for source in SOURCES:
     if source['id'] in PUBLIC_CONNECTORS:
