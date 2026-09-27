@@ -82,6 +82,16 @@ def grouped_sources(sources):
     portal=lambda source: source.get('kind')=='portal' or source.get('state')=='portal-only'
     return [source for source in ordered if not portal(source)], [source for source in ordered if portal(source)]
 
+def area_label(area, reference=None):
+    """Show a postcode prefix with the conservative locality names behind it."""
+    area=str(area or '')
+    if not area or area=='Location not supplied': return area or 'Location not supplied'
+    reference=reference or DATA.get('locationReference',{}) if 'DATA' in globals() else reference or {}
+    places=sorted({entry.get('place','') for entry in reference.get('codes',[]) if area in entry.get('postcodeAreas',[]) and entry.get('place')})
+    if not places: return area
+    suffix=', '.join(places[:2]) + (' and nearby' if len(places)>2 else '')
+    return f'{area} - {suffix}'
+
 def selected_location(value, reference):
     raw_query=value.strip()
     query=raw_query.upper()
@@ -96,7 +106,7 @@ def selected_location(value, reference):
         areas=sorted({area for entry in place_matches for area in entry.get('postcodeAreas',[])})
         return {'code':None,'areas':areas,'place':raw_query.casefold()}, f"Town/city match: {raw_query} → {', '.join(areas) or 'postcode association unavailable'} (approximate town/city match)"
     match=re.match(r'^([A-Z]{1,2})(?:\d[A-Z\d]?(?:\d[A-Z]{2})?)?$',query.replace(' ',''))
-    if match: return {'code':None,'areas':[match.group(1)]}, f'Postcode area {match.group(1)} · not a household match'
+    if match: return {'code':None,'areas':[match.group(1)]}, f'Postcode area {area_label(match.group(1),reference)} · not a household match'
     if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{2,}", raw_query):
         return {'code':None,'areas':[],'geography':raw_query.casefold()}, f'Country, county or local-authority match: {raw_query}'
     return {'code':None,'areas':[]}, 'Enter a postcode, country, county or local authority.'
@@ -180,7 +190,7 @@ def lock_map_selection(event, key):
         st.rerun()
 
 def map_records(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],
+    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
              'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
             for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     if points:
@@ -191,7 +201,7 @@ def map_records(records):
             views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
             layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=9000,radius_min_pixels=5,radius_max_pixels=14,
                               get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True)],
-            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{category}<br/>{type}<br/><i>Click to lock to {area}</i>'},
+            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{category}<br/>{type}<br/>{areaLabel}<br/><i>Click to lock to this area</i>'},
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='outage_map'), 'outage_map')
@@ -202,9 +212,9 @@ def impact_weight(item):
     except (TypeError, ValueError): return 1
 
 def impact_heatmap(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'title':item.get('title'),'provider':item.get('provider')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     if not points: st.info('No mapped locations match these filters.'); return
-    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],tooltip={'html':'<b>{provider}</b><br/>{title}<br/><i>Click to lock to {area}</i>'},map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{areaLabel}<br/><i>Click to lock to this area</i>'},map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
     lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='impact_heatmap'), 'impact_heatmap')
 
 def incident_list(records, title='Published evidence'):
@@ -217,7 +227,7 @@ def incident_list(records, title='Published evidence'):
             if item.get('stale'): st.warning('This record is stale because its source is unavailable or its published data is old.')
             details=[]
             if item.get('evidenceType'): details.append(f"Evidence: {item['evidenceType']}")
-            if item.get('reportedPostcodeAreas'): details.append('Reported areas: '+', '.join(item['reportedPostcodeAreas']))
+            if item.get('reportedPostcodeAreas'): details.append('Reported areas: '+', '.join(area_label(area) for area in item['reportedPostcodeAreas']))
             if item.get('telephoneAreas'): details.append('Telephone association (approximate): '+'; '.join(f"{x['code']} → {', '.join(x['postcodeAreas'])}" for x in item['telephoneAreas']))
             if item.get('customersAffected') is not None: details.append(f"Customers affected: {item['customersAffected']}")
             if item.get('estimatedRestorationAt'): details.append('Estimated restoration: '+item['estimatedRestorationAt'])
@@ -233,7 +243,7 @@ def correlated_view():
         for area in (item.get('postcodeAreas') or [item.get('region') or 'Location not supplied'])[:3]: groups[area].append(item)
     overlaps=[(area,items) for area,items in groups.items() if len({x.get('category') for x in items})>1 or len({x.get('provider') for x in items})>1]
     if overlaps:
-        for area,items in sorted(overlaps,key=lambda x:len(x[1]),reverse=True)[:6]: st.info(f"**{area}** · {len(items)} matching notices across {', '.join(sorted({CATEGORY_LABELS.get(x.get('category'),x.get('category')) for x in items}))}. Review source records before attributing a cause.")
+        for area,items in sorted(overlaps,key=lambda x:len(x[1]),reverse=True)[:6]: st.info(f"**{area_label(area)}** · {len(items)} matching notices across {', '.join(sorted({CATEGORY_LABELS.get(x.get('category'),x.get('category')) for x in items}))}. Review source records before attributing a cause.")
     else: st.caption('No multi-source geographic overlap is visible in the selected records.')
     left,right=st.columns((3,2))
     with left: st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postcode, telephone and probe locations are approximate.'); map_records(records)
@@ -251,7 +261,7 @@ def trends_view():
     impact_heatmap(records)
     areas=Counter(area for item in records for area in (item.get('postcodeAreas') or [item.get('region') or 'Location not supplied'])[:3])
     st.subheader('Areas with the most matching evidence')
-    if areas: st.bar_chart({area:areas[area] for area,_ in areas.most_common(15)})
+    if areas: st.bar_chart({area_label(area):areas[area] for area,_ in areas.most_common(15)})
     exports(records,DATA,summary); incident_list(records,'Evidence contributing to the trends')
 
 def category_view(key,title,description):
