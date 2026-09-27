@@ -5,14 +5,19 @@ import io
 import json
 
 
-COLUMNS = (
-    'record_type', 'generated_at', 'collection_at', 'backend_available',
-    'filters', 'record_count', 'id', 'provider', 'category', 'evidence_type',
-    'title', 'status', 'reported_at', 'last_fetched_at', 'source_updated_at',
-    'stale', 'region', 'reported_postcode_areas', 'inferred_postcode_areas',
-    'telephone_codes', 'location_methods', 'location_points', 'location_conflict',
-    'customers_affected', 'estimated_restoration_at', 'source_url', 'description',
-    'source_state', 'source_error', 'last_success_at', 'attribution', 'limitations',
+INCIDENT_COLUMNS = (
+    'provider', 'incident', 'status', 'category', 'evidence_type', 'reported_at',
+    'identified_at', 'last_fetched_at', 'estimated_restoration_at', 'local_area',
+    'postcode_districts', 'reported_postcode_areas', 'telephone_codes',
+    'customers_affected', 'location', 'stale', 'source_url', 'description',
+    'attribution', 'filter_mode', 'filter_location', 'filter_provider',
+    'filter_search', 'report_generated_at', 'collection_at',
+)
+SOURCE_COLUMNS = (
+    'source', 'category', 'connection_state', 'scope', 'last_attempt_at',
+    'last_success_at', 'source_updated_at', 'records_returned', 'coverage',
+    'error', 'website', 'feed_endpoint', 'notes', 'attribution',
+    'report_generated_at', 'collection_at',
 )
 LIMITATIONS = (
     'Provider reports, risk notices and passive network signals are not household diagnoses. '
@@ -65,46 +70,53 @@ def _value(value):
     # Spreadsheet applications can otherwise execute a formula supplied by an upstream feed.
     return "'" + value if value.lstrip().startswith(('=', '+', '-', '@')) else value
 
+def _joined(values):
+    return '; '.join(str(value) for value in (values or []) if value not in (None, ''))
 
-def csv_bytes(payload):
-    """Return UTF-8 BOM CSV containing the report header, incidents and source health."""
-    rows = [{
-        'record_type': 'report', 'generated_at': payload['generatedAt'],
-        'collection_at': payload['collectedAt'], 'backend_available': payload['backendAvailable'],
-        'filters': payload['filters'], 'record_count': payload['summary']['recordCount'],
-        'attribution': payload['locationAttribution'], 'limitations': payload['limitations'],
-    }]
-    for item in payload['incidents']:
-        rows.append({
-            'record_type': 'incident', 'generated_at': payload['generatedAt'],
-            'collection_at': payload['collectedAt'], 'backend_available': payload['backendAvailable'],
-            'id': item.get('id'), 'provider': item.get('provider'), 'category': item.get('category'),
-            'evidence_type': item.get('evidenceType', 'provider-notice'), 'title': item.get('title'),
-            'status': item.get('status'), 'reported_at': item.get('date'), 'last_fetched_at': item.get('observedAt'),
-            'source_updated_at': item.get('sourceUpdatedAt'), 'stale': item.get('stale'), 'region': item.get('region'),
-            'reported_postcode_areas': item.get('reportedPostcodeAreas'),
-            'inferred_postcode_areas': item.get('inferredPostcodeAreas'),
-            'telephone_codes': [code.get('code') for code in item.get('telephoneAreas', [])],
-            'location_methods': [point.get('method') for point in item.get('locationPoints', [])],
-            'location_points': item.get('locationPoints'), 'location_conflict': item.get('locationConflict'),
-            'customers_affected': item.get('customersAffected'),
-            'estimated_restoration_at': item.get('estimatedRestorationAt'), 'source_url': item.get('url'),
-            'description': item.get('description'), 'attribution': item.get('attribution'),
-            'limitations': payload['limitations'],
-        })
-    for source in payload['sources']:
-        rows.append({
-            'record_type': 'source', 'generated_at': payload['generatedAt'],
-            'collection_at': payload['collectedAt'], 'backend_available': payload['backendAvailable'],
-            'id': source.get('id'), 'provider': source.get('name'), 'category': source.get('category'),
-            'source_state': source.get('state'), 'source_error': source.get('error'),
-            'last_success_at': source.get('lastSuccess'), 'last_fetched_at': source.get('checkedAt'),
-            'source_updated_at': source.get('sourceUpdatedAt'), 'source_url': source.get('website'),
-            'description': source.get('note'), 'attribution': source.get('attribution'),
-            'limitations': payload['limitations'],
-        })
+def _write_csv(columns, rows):
     output = io.StringIO(newline='')
-    writer = csv.DictWriter(output, fieldnames=COLUMNS, extrasaction='ignore', lineterminator='\r\n')
+    writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore', lineterminator='\r\n')
     writer.writeheader()
     writer.writerows({key: _value(value) for key, value in row.items()} for row in rows)
     return ('\ufeff' + output.getvalue()).encode('utf-8')
+
+
+def csv_bytes(payload):
+    """Return a compact, one-row-per-incident spreadsheet."""
+    filters=payload.get('filters') or {}
+    rows=[]
+    for item in payload['incidents']:
+        points=[f"{point.get('lat')},{point.get('lng')} ({point.get('method','unknown')})" for point in item.get('locationPoints',[]) if point.get('lat') is not None and point.get('lng') is not None]
+        rows.append({
+            'provider': item.get('provider'), 'incident': item.get('title'), 'category': item.get('category'),
+            'evidence_type': item.get('evidenceType', 'provider-notice'),
+            'status': item.get('status'), 'reported_at': item.get('date'), 'last_fetched_at': item.get('observedAt'),
+            'identified_at': item.get('identifiedAt'), 'stale': item.get('stale'), 'local_area': item.get('region'),
+            'reported_postcode_areas': _joined(item.get('reportedPostcodeAreas')),
+            'postcode_districts': _joined(item.get('postcodeDistricts')),
+            'telephone_codes': _joined(code.get('code') for code in item.get('telephoneAreas', [])),
+            'location': _joined(points),
+            'customers_affected': item.get('customersAffected'),
+            'estimated_restoration_at': item.get('estimatedRestorationAt'), 'source_url': item.get('url'),
+            'description': item.get('description'), 'attribution': item.get('attribution'),
+            'filter_mode': filters.get('mode'), 'filter_location': filters.get('location'),
+            'filter_provider': filters.get('provider'), 'filter_search': filters.get('search'),
+            'report_generated_at': payload['generatedAt'], 'collection_at': payload['collectedAt'],
+        })
+    return _write_csv(INCIDENT_COLUMNS, rows)
+
+def source_health_csv_bytes(payload):
+    """Return a separate, one-row-per-source health spreadsheet."""
+    rows=[]
+    for source in payload['sources']:
+        rows.append({
+            'source': source.get('name'), 'category': source.get('category'), 'connection_state': source.get('state'),
+            'scope': source.get('scope'), 'last_attempt_at': source.get('checkedAt'),
+            'last_success_at': source.get('lastSuccess'), 'source_updated_at': source.get('sourceUpdatedAt'),
+            'records_returned': source.get('count'), 'coverage': source.get('coverage'), 'error': source.get('error'),
+            'website': source.get('website'), 'feed_endpoint': source.get('url'), 'notes': source.get('note'),
+            'attribution': source.get('attribution'), 'report_generated_at': payload['generatedAt'],
+            'collection_at': payload['collectedAt'],
+        })
+    return _write_csv(SOURCE_COLUMNS, rows)
+
