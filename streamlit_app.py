@@ -44,6 +44,15 @@ def configure_street_manager():
     except Exception:
         pass
 
+def configure_spen():
+    """Expose the SPEN read-only Open Data key only to the collector process."""
+    try:
+        api_key = st.secrets.get('spen', {}).get('api_key')
+        if api_key:
+            os.environ['SPEN_API_KEY'] = str(api_key)
+    except Exception:
+        pass
+
 @st.cache_data(ttl=120, show_spinner='Refreshing public outage feeds…')
 def load_dashboard():
     """Refresh the collectors and return a consistent dashboard snapshot."""
@@ -240,6 +249,7 @@ def routing_view(): category_view('routing','Internet routing signals','Passive 
 def services_view(): category_view('third-party','Online services','Cloud, DNS and application issues that can resemble a home broadband problem.')
 
 configure_street_manager()
+configure_spen()
 
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
