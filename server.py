@@ -109,6 +109,13 @@ def postcode_district(value):
 
 def parse(source, raw):
     kind = source['kind']
+    if kind == 'gointernet':
+        # The board has no documented API. Only parse the public active-incident section;
+        # closed history is deliberately excluded from the live evidence view.
+        active=raw.decode('utf-8','replace').split('Closed incidents',1)[0]
+        titles=re.findall(r'Incident title.*?text-gray-950 dark:text-white\s*"\s*>\s*(.*?)\s*</div>',active,re.S)
+        return [event(source, hashlib.sha256(plain(title).encode()).hexdigest(), plain(title), now(), 'reported',
+                      'Public Go Internet status-board incident. Verify with the provider.', source['website']) for title in titles]
     if kind == 'rss':
         root = ET.fromstring(raw)
         if root.tag.split('}')[-1] not in ('rss', 'feed', 'RDF'):
