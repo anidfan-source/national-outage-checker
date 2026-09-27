@@ -64,9 +64,9 @@ Street Manager is integrated through DfT Open Data notifications rather than aut
 Deploy `cloudflare-worker/` on the Cloudflare Workers Free plan using its README. No payment card is required. Enter these receiver endpoints in the Street Manager Open Data onboarding form:
 
 ```
-Permit:    https://YOUR-WORKER.workers.dev/street-manager/permit
-Activity:  https://YOUR-WORKER.workers.dev/street-manager/activity
-Section58: https://YOUR-WORKER.workers.dev/street-manager/section-58
+Permit:    https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/permit
+Activity:  https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/activity
+Section58: https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/section-58
 ```
 
 Do not enter the Streamlit application URL. The receiver must be directly reachable by AWS SNS over HTTPS.
