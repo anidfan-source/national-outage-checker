@@ -45,6 +45,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('time_after_first_fetch', source)
         self.assertIn('Identified:', source)
         self.assertIn('named-place', (Path(__file__).resolve().parents[1] / 'locations.py').read_text(encoding='utf-8'))
+        self.assertIn('load_historic_flood_warnings(window_start)', source)
+        self.assertIn('load_historic_weather_warnings(window_start)', source)
 
 
 if __name__ == '__main__':

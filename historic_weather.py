@@ -8,8 +8,8 @@ ARCHIVE_URL = 'https://www.metoffice.gov.uk/research/library-and-archive/publica
 DATA_FILE = Path(__file__).resolve().parent / 'reference' / 'nswws_metadata_2026.json'
 
 
-def fetch_historic_weather_warnings():
-    """Return metadata rows, not a reconstruction of each warning's validity area or duration."""
+def fetch_historic_weather_warnings(since=None):
+    """Build only the selected date window from the bundled historic metadata index."""
     rows = json.loads(DATA_FILE.read_text(encoding='utf-8'))
     if not isinstance(rows, list):
         raise ValueError('Historic weather metadata must be a list')
@@ -22,6 +22,8 @@ def fetch_historic_weather_warnings():
         if not all(isinstance(value, str) and value.strip() for value in (warning_id, issued, classification, element, region)):
             raise ValueError('Historic weather metadata row is incomplete')
         issued_at = datetime.fromisoformat(issued).replace(tzinfo=timezone.utc).isoformat()
+        if since and issued_at < since:
+            continue
         point=named_place_point(region)
         records.append({
             'id': 'metoffice-historic:' + warning_id,
