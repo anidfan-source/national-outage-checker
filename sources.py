@@ -25,6 +25,8 @@ feed('azure', 'Microsoft Azure', 'third-party', 'rss', 'https://status.azure.com
 feed('aa', 'Andrews & Arnold', 'broadband', 'rss', 'https://aastatus.net/atom.cgi', 'https://aastatus.net', 'UK provider / location unspecified')
 feed('zen', 'Zen Broadband faults', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-faults-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified')
 feed('zen-maintenance', 'Zen Broadband maintenance', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-maintenance-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified', 'Planned work notices; check provider for current status.')
+feed('zzoomm', 'Zzoomm network status', 'broadband', 'statuspage', 'https://zzoomm.statuspage.io/api/v2/incidents.json', 'https://zzoomm.statuspage.io/', 'Zzoomm full-fibre network in England', 'Official public Statuspage incidents. Provider notices are useful context but do not diagnose an individual household connection.')
+feed('wessex-internet', 'Wessex Internet network status', 'broadband', 'statuspage', 'https://wessexinternet.statuspage.io/api/v2/incidents.json', 'https://wessexinternet.statuspage.io/', 'Wessex Internet fibre and fixed-wireless areas in South West England', 'Official public Statuspage incidents and area notices. Location names are provider supplied and may cover surrounding areas.')
 feed('gointernet','Go Internet network status','broadband','gointernet','https://status.gointernet.co.uk/status','https://status.gointernet.co.uk/status','Isle of Wight, Isle of Sheppey and UK wholesale networks','Public status-board incidents for fixed wireless, FTTP and wholesale network context. HTML adapter; individual lines are not diagnosed.')
 feed('npg', 'Northern Powergrid', 'electricity', 'npg', 'https://northernpowergrid.opendatasoft.com/api/explore/v2.1/catalog/datasets/live-power-cuts-data/records', 'https://northernpowergrid.opendatasoft.com/explore/dataset/live-power-cuts-data/', 'North East England, Yorkshire and northern Lincolnshire', 'Source coordinates; power loss can interrupt routers and network equipment.')
 feed('metoffice', 'Met Office weather warnings', 'environment', 'rss', 'https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK', 'https://weather.metoffice.gov.uk/warnings-and-advice', 'UK', 'Risk context, not proof of a broadband outage. Verify warning validity at source.')
@@ -56,6 +58,8 @@ for id, name, category, website, note in [
  ('communityfibre','Community Fibre','broadband','https://communityfibre.co.uk/','Provider help and network status.'),
  ('gnetwork','G.Network','broadband','https://www.g.network/','Provider help and network status.'),
  ('toob','toob','broadband','https://www.toob.co.uk/','Provider help and network status.'),
+ ('quickline','Quickline','broadband','https://quickline.co.uk/status/','Public service-status page. Listed for manual verification until a stable, permitted machine-readable feed is confirmed.'),
+ ('wightfibre','WightFibre','broadband','https://www.wightfibre.com/help/service-update/','Public service-update page. Listed for manual verification until a stable, permitted machine-readable feed is confirmed.'),
  ('idnet','IDNet','broadband','https://status.idnet.com/','Public status portal; feed adapter not verified.'),
  ('starlink','Starlink satellite broadband','broadband','https://www.starlink.com/support','Customer terminal/app diagnostics; no connected public outage feed.'),
  ('ukpn','UK Power Networks','electricity','https://ukpowernetworks.opendatasoft.com/explore/dataset/ukpn-national-energy-outage/','Open Data registration/access required for National Energy Outage data; adapter pending.'),
@@ -108,3 +112,4 @@ PUBLIC_CONNECTORS = {
 for source in SOURCES:
     if source['id'] in PUBLIC_CONNECTORS:
         source.update(PUBLIC_CONNECTORS[source['id']])
+
