@@ -21,6 +21,11 @@ st.markdown('''<style>
 </style>''', unsafe_allow_html=True)
 
 CATEGORY_LABELS = {'broadband':'Broadband & mobile backup','electricity':'Power cuts','third-party':'Cloud, DNS & apps','environment':'Weather & flood risk','routing':'Routing & internet signals'}
+CATEGORY_COLORS = {
+    'broadband':[0, 119, 182, 220], 'electricity':[220, 53, 69, 220],
+    'third-party':[112, 48, 160, 220], 'environment':[8, 127, 91, 220],
+    'routing':[230, 126, 34, 220],
+}
 CLOSED = {'resolved','completed','postmortem'}
 
 def street_manager_configured():
@@ -77,7 +82,8 @@ def grouped_sources(sources):
     return [source for source in ordered if not portal(source)], [source for source in ordered if portal(source)]
 
 def selected_location(value, reference):
-    query=value.strip().upper()
+    raw_query=value.strip()
+    query=raw_query.upper()
     if not query: return None, ''
     normal=query.replace(' ','').replace('(','').replace(')','').replace('-','')
     if normal.startswith('+44'): normal='0'+normal[3:].lstrip('0')
@@ -86,12 +92,20 @@ def selected_location(value, reference):
     if code: return {'code':normal,'areas':code['postcodeAreas']}, f"{normal} · {code['place']} → {', '.join(code['postcodeAreas']) or 'postcode association unavailable'} (approximate)"
     match=re.match(r'^([A-Z]{1,2})(?:\d[A-Z\d]?(?:\d[A-Z]{2})?)?$',query.replace(' ',''))
     if match: return {'code':None,'areas':[match.group(1)]}, f'Postcode area {match.group(1)} · not a household match'
-    return {'code':None,'areas':[]}, 'Enter 0113, LS, or a postcode.'
+    if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{2,}", raw_query):
+        return {'code':None,'areas':[],'geography':raw_query.casefold()}, f'Country, county or local-authority match: {raw_query}'
+    return {'code':None,'areas':[]}, 'Enter a postcode, country, county or local authority.'
 
 def location_match(item, selection):
     if not selection: return True
     if selection['code'] and any(code.get('code')==selection['code'] for code in item.get('telephoneAreas',[])): return True
-    return any(area in selection['areas'] for area in item.get('postcodeAreas',[]))
+    if selection['areas']:
+        return any(area in selection['areas'] for area in item.get('postcodeAreas',[]))
+    geography=selection.get('geography')
+    if geography:
+        fields=('region','localAuthority','country','title','description')
+        return geography in ' '.join(str(item.get(field) or '') for field in fields).casefold()
+    return False
 
 def filtered_incidents(data, categories, provider, location, query, mode, since):
     records=[]
@@ -117,7 +131,7 @@ def filters(data, page_categories=None):
         mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
     with st.sidebar:
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
-        location_query=st.text_input('Location',placeholder='0113, LS or LS1 1AA',help='Matches reported postcode areas and approximate dialling-code areas.')
+        location_query=st.text_input('Location',placeholder='LS1 1AA, Scotland or Aberdeenshire',help='Search by postcode, UK country, county or local authority. Country/county matches use source-supplied location text.')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
         query=st.text_input('Find a provider or issue',placeholder='Power cut, Zen, rain…')
@@ -149,12 +163,18 @@ def exports(records, data, summary):
     b.download_button('Export filtered JSON',json.dumps(payload,ensure_ascii=False,indent=2),filename('json'),'application/json',use_container_width=True)
 
 def map_records(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),
+             'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
+            for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     if points:
+        legend='&nbsp;&nbsp;'.join(f'<span style="color:rgb({color[0]},{color[1]},{color[2]});font-weight:700">●</span> {CATEGORY_LABELS[key]}' for key,color in CATEGORY_COLORS.items())
+        st.markdown(f'<div style="font-size:.85rem;margin:.2rem 0 .6rem">{legend}</div>',unsafe_allow_html=True)
         chart=pdk.Deck(
-            initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.1,min_zoom=4.5,max_zoom=12,pitch=0),
-            layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=8500,get_fill_color='[18, 104, 166, 190]',pickable=True)],
-            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{type}'},
+            initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),
+            views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
+            layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=9000,radius_min_pixels=5,radius_max_pixels=14,
+                              get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True)],
+            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{category}<br/>{type}'},
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         st.pydeck_chart(chart,width='stretch')

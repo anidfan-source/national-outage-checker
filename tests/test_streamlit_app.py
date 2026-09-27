@@ -29,6 +29,9 @@ class StreamlitAppTests(unittest.TestCase):
         # Verify that the selected page is explicitly run so production is not blank.
         source = (Path(__file__).resolve().parents[1] / 'streamlit_app.py').read_text(encoding='utf-8')
         self.assertIn('navigation.run()', source)
+        self.assertIn('Country, county or local-authority match', source)
+        self.assertIn('maxBounds', source)
+        self.assertIn('CATEGORY_COLORS', source)
 
 
 if __name__ == '__main__':
