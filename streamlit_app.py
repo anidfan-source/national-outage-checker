@@ -11,6 +11,7 @@ import streamlit as st
 import server
 from historic_flood import fetch_historic_flood_warnings
 from historic_weather import fetch_historic_weather_warnings
+from locations import distance_km, lookup_postcode
 from reporting import LIMITATIONS, csv_bytes, report
 
 st.set_page_config(page_title='UK Outage Viewer', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
@@ -104,6 +105,10 @@ def load_historic_flood_warnings(since):
 def load_historic_weather_warnings(since):
     return fetch_historic_weather_warnings(since=since)
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def resolve_postcode(value):
+    return lookup_postcode(value)
+
 def text(value): return str(value or '').casefold()
 
 def grouped_sources(sources):
@@ -113,19 +118,27 @@ def grouped_sources(sources):
     return [source for source in ordered if not portal(source)], [source for source in ordered if portal(source)]
 
 def area_label(area, reference=None):
-    """Show a postcode prefix with the conservative locality names behind it."""
+    """Never imply that a broad postcode area identifies one representative town."""
     area=str(area or '')
     if not area or area=='Location not supplied': return area or 'Location not supplied'
-    reference=reference or DATA.get('locationReference',{}) if 'DATA' in globals() else reference or {}
-    places=sorted({entry.get('place','') for entry in reference.get('codes',[]) if area in entry.get('postcodeAreas',[]) and entry.get('place')})
-    if not places: return area
-    suffix=', '.join(places[:2]) + (' and nearby' if len(places)>2 else '')
-    return f'{area} - {suffix}'
+    return f'{area} — broad postcode area; exact locality unavailable' if re.fullmatch(r'[A-Z]{1,2}',area) else area
 
 def selected_location(value, reference):
     raw_query=value.strip()
     query=raw_query.upper()
     if not query: return None, ''
+    if re.fullmatch(r'[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}',query):
+        try:
+            resolved=resolve_postcode(query)
+        except Exception:
+            return {'code':None,'areas':[]}, 'Full-postcode lookup is temporarily unavailable.'
+        if not resolved:
+            return {'code':None,'areas':[]}, 'Postcode not found. Check the full UK postcode and try again.'
+        names=[resolved.get(k) for k in ('admin_ward','admin_district','admin_county','country') if resolved.get(k)]
+        selection={'code':None,'areas':[re.match(r'[A-Z]+',resolved['outcode'])[0]],'district':resolved['outcode'],
+            'lat':resolved.get('latitude'),'lng':resolved.get('longitude'),'localNames':[x.casefold() for x in names],
+            'postcode':resolved['postcode']}
+        return selection, f"{resolved['postcode']} · {' · '.join(dict.fromkeys(names))} · exact postcode centroid"
     normal=query.replace(' ','').replace('(','').replace(')','').replace('-','')
     if normal.startswith('+44'): normal='0'+normal[3:].lstrip('0')
     if normal.startswith('0044'): normal='0'+normal[4:].lstrip('0')
@@ -144,6 +157,12 @@ def selected_location(value, reference):
 def location_match(item, selection):
     if not selection: return True
     if selection['code'] and any(code.get('code')==selection['code'] for code in item.get('telephoneAreas',[])): return True
+    if selection.get('district'):
+        if selection['district'] in item.get('postcodeDistricts',[]): return True
+        evidence=' '.join(str(item.get(field) or '') for field in ('region','localAuthority','country','title','description')).casefold()
+        if any(name in evidence for name in selection.get('localNames',[]) if len(name)>3): return True
+        distances=[distance_km(selection.get('lat'),selection.get('lng'),point.get('lat'),point.get('lng')) for point in item.get('locationPoints',[])]
+        return any(distance is not None and distance <= 50 for distance in distances)
     if selection['areas'] and any(area in selection['areas'] for area in item.get('postcodeAreas',[])): return True
     place=selection.get('place')
     if place and place in ' '.join(str(item.get(field) or '') for field in ('region','localAuthority','country','title','description')).casefold(): return True
@@ -193,7 +212,7 @@ def filters(data, page_categories=None):
         mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
     with st.sidebar:
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
-        location_query=st.text_input('Location',placeholder='LS1 1AA, Glasgow, Scotland or Aberdeenshire',help='Search by postcode, city, town, UK country, county or local authority. Click a mapped point to lock this filter to its reported area.',key='location_query')
+        location_query=st.text_input('Location',placeholder='PA28 6AN, Glasgow, Scotland or Aberdeenshire',help='A full postcode is resolved through the open Postcodes.io API to its approximate centroid, district and ward. Partial postcode areas remain broad. You can also search by city, country, county or local authority.',key='location_query')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
         query=st.text_input('Find a provider or issue',placeholder='Power cut, Zen, rain…')
@@ -219,7 +238,7 @@ def filters(data, page_categories=None):
             st.sidebar.warning(f'Historic weather archive unavailable: {type(error).__name__}')
         incident_data={**data,'incidents':data['incidents']+flood_history+weather_history}
     records=filtered_incidents(incident_data,categories,provider,location,query,mode,since)
-    summary={'mode':mode.lower(),'categories':categories,'provider':None if provider=='All providers' else provider,'location':location_query,'locationInterpretation':message or None,'search':query,'timeWindow':'current feed records' if mode=='Live' else f'last {days} calendar days','from':None if mode=='Live' else since.isoformat(),'through':now.isoformat()}
+    summary={'mode':mode.lower(),'categories':categories,'provider':None if provider=='All providers' else provider,'location':location_query,'locationInterpretation':message or None,'resolvedLocation':location,'search':query,'timeWindow':'current feed records' if mode=='Live' else f'last {days} calendar days','from':None if mode=='Live' else since.isoformat(),'through':now.isoformat()}
     return records,summary
 
 def header(data, eyebrow, title, description):
@@ -241,18 +260,24 @@ def lock_map_selection(event, key):
         st.session_state['map_area_pending']=selected['area']
         st.rerun()
 
-def map_records(records):
+def map_records(records, selection=None):
     points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
              'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
             for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
-    if points:
+    search_points=[{'lat':selection['lat'],'lon':selection['lng'],'postcode':selection['postcode']}] if selection and selection.get('lat') is not None and selection.get('lng') is not None else []
+    if points or search_points:
         legend='&nbsp;&nbsp;'.join(f'<span style="color:rgb({color[0]},{color[1]},{color[2]});font-weight:700">●</span> {CATEGORY_LABELS[key]}' for key,color in CATEGORY_COLORS.items())
         st.markdown(f'<div style="font-size:.85rem;margin:.2rem 0 .6rem">{legend}</div>',unsafe_allow_html=True)
+        centre=search_points[0] if search_points else {'lat':54.5,'lon':-3.4}
+        layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=9000,radius_min_pixels=5,radius_max_pixels=14,
+                              get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True)]
+        if search_points: layers.append(pdk.Layer('ScatterplotLayer',data=search_points,get_position='[lon, lat]',get_radius=700,
+            radius_min_pixels=8,radius_max_pixels=12,get_fill_color='[255,255,255,30]',get_line_color='[13,110,253,255]',
+            line_width_min_pixels=3,stroked=True,pickable=True))
         chart=pdk.Deck(
-            initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),
+            initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
             views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
-            layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=9000,radius_min_pixels=5,radius_max_pixels=14,
-                              get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True)],
+            layers=layers,
             tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{category}<br/>{type}<br/>{areaLabel}<br/><i>Click to lock to this area</i>'},
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
@@ -304,7 +329,7 @@ def correlated_view():
         for area,items in sorted(overlaps,key=lambda x:len(x[1]),reverse=True)[:6]: st.info(f"**{area_label(area)}** · {len(items)} matching notices across {', '.join(sorted({CATEGORY_LABELS.get(x.get('category'),x.get('category')) for x in items}))}. Review source records before attributing a cause.")
     else: st.caption('No multi-source geographic overlap is visible in the selected records.')
     left,right=st.columns((3,2))
-    with left: st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postcode, telephone and probe locations are approximate.'); map_records(records)
+    with left: st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postcode centroids, telephone and probe locations are approximate.'); map_records(records,summary.get('resolvedLocation'))
     with right:
         trend=Counter((x.get('date') or '')[:10] for x in records if x.get('date')); st.subheader('Notice trend')
         if trend: st.bar_chart({day:trend[day] for day in sorted(trend)})
@@ -327,7 +352,7 @@ def category_view(key,title,description):
     values=(len(records),len({x.get('provider') for x in records}),len({a for x in records for a in x.get('postcodeAreas',[])}))
     for col,label,value in zip(st.columns(3),('Matching notices','Providers represented','Postcode areas mentioned'),values): col.metric(label,value)
     left,right=st.columns((3,2))
-    with left: st.subheader('Locations'); map_records(records)
+    with left: st.subheader('Locations'); map_records(records,summary.get('resolvedLocation'))
     with right: exports(records,DATA,summary); st.caption(LIMITATIONS)
     incident_list(records)
 
@@ -367,7 +392,7 @@ def weather_view():
     values=(len(records),len({x.get('provider') for x in records}),len({a for x in records for a in x.get('postcodeAreas',[])}))
     for col,label,value in zip(st.columns(3),('Matching notices','Providers represented','Postcode areas mentioned'),values): col.metric(label,value)
     left,right=st.columns((3,2))
-    with left: st.subheader('Locations'); map_records(records)
+    with left: st.subheader('Locations'); map_records(records,summary.get('resolvedLocation'))
     with right: exports(records,DATA,summary); st.caption(LIMITATIONS)
     incident_list(records)
 def routing_view(): category_view('routing','Internet routing signals','Passive evidence of wider connectivity changes. These signals are not confirmed ISP outages.')
