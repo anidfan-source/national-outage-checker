@@ -39,6 +39,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('lock_map_selection', source)
         self.assertIn("on_select='rerun'", source)
         self.assertIn('map_area_pending', source)
+        self.assertIn('def area_label', source)
+        self.assertIn('areaLabel', source)
 
 
 if __name__ == '__main__':
