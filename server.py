@@ -233,7 +233,9 @@ def refresh():
                 continue
             conn.execute('UPDATE incidents SET current=0 WHERE source=?', (health['id'],))
             for item in records:
-                conn.execute('INSERT OR REPLACE INTO incidents VALUES (?,?,?,?,?)',
+                # Keep `seen` as the first dashboard observation. Provider timestamps can be
+                # ahead of the collecting clock, so replacing it would erase useful evidence.
+                conn.execute('INSERT INTO incidents VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET source=excluded.source, current=excluded.current, body=excluded.body',
                              (item['id'], health['id'], item['observedAt'], 1, json.dumps(item)))
         conn.execute('DELETE FROM incidents WHERE seen < ?', ((datetime.now(timezone.utc) - timedelta(days=366)).isoformat(),))
     with LOCK:
@@ -244,9 +246,9 @@ def snapshot():
         state = json.loads(json.dumps(STATE))
     health = {s['id']: s for s in state['sources']}
     with database() as conn:
-        rows = conn.execute('SELECT source,current,body FROM incidents').fetchall()
-    state['incidents'] = [{**enrich(json.loads(body)), 'current': bool(current),
-                           'stale': health.get(source, {}).get('state') != 'connected' or outdated(json.loads(body).get('sourceUpdatedAt'), date)} for source, current, body in rows]
+        rows = conn.execute('SELECT source,seen,current,body FROM incidents').fetchall()
+    state['incidents'] = [{**enrich(json.loads(body)), 'identifiedAt': seen, 'current': bool(current),
+                           'stale': health.get(source, {}).get('state') != 'connected' or outdated(json.loads(body).get('sourceUpdatedAt'), date)} for source, seen, current, body in rows]
     state['locationReference'] = reference_summary()
     state['pollSeconds'] = INTERVAL
     return state

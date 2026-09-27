@@ -14,6 +14,7 @@ FIXTURE = {
     'incidents': [{'id': 'test:1', 'sourceId': 'test', 'provider': 'Test provider', 'category': 'broadband',
                    'title': 'Test outage', 'description': 'Published test notice', 'region': 'LS1 1AA',
                    'date': '2026-09-26T11:00:00+00:00', 'observedAt': '2026-09-26T12:00:00+00:00',
+                   'identifiedAt': '2026-09-26T12:00:00+00:00',
                    'status': 'reported', 'current': True, 'stale': False, 'url': 'https://example.com/1',
                    'postcodeAreas': ['LS'], 'reportedPostcodeAreas': ['LS'], 'inferredPostcodeAreas': [],
                    'telephoneAreas': [], 'locationPoints': [{'lat': 53.8, 'lng': -1.5, 'method': 'source'}]}],
@@ -41,6 +42,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('map_area_pending', source)
         self.assertIn('def area_label', source)
         self.assertIn('areaLabel', source)
+        self.assertIn('time_after_first_fetch', source)
+        self.assertIn('Identified:', source)
 
 
 if __name__ == '__main__':

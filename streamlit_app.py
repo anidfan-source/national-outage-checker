@@ -139,6 +139,13 @@ def filtered_incidents(data, categories, provider, location, query, mode, since)
 
 def filename(extension): return 'uk-outage-report-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'.'+extension
 
+def time_after_first_fetch(item):
+    """Return true only when a provider time was later than dashboard discovery."""
+    try:
+        return datetime.fromisoformat(item['date']) > datetime.fromisoformat(item.get('identifiedAt') or item['observedAt'])
+    except (KeyError, TypeError, ValueError):
+        return False
+
 def filters(data, page_categories=None):
     names={source['id']:source['name'] for source in data['sources']}
     if st.session_state.get('map_area_pending'):
@@ -223,7 +230,10 @@ def incident_list(records, title='Published evidence'):
     for item in records:
         with st.expander(f"{item.get('provider')} · {item.get('title')}"):
             st.write(item.get('description') or 'No public description supplied.')
-            st.caption(f"Status: {item.get('status')} · Reported: {item.get('date') or 'not supplied'} · Last fetched: {item.get('observedAt')}")
+            if time_after_first_fetch(item):
+                st.caption(f"Status: {item.get('status')} · Identified: {item.get('identifiedAt') or item.get('observedAt')} · Provider-reported time: {item.get('date')} (after first fetch) · Last fetched: {item.get('observedAt')}")
+            else:
+                st.caption(f"Status: {item.get('status')} · Reported: {item.get('date') or 'not supplied'} · Last fetched: {item.get('observedAt')}")
             if item.get('stale'): st.warning('This record is stale because its source is unavailable or its published data is old.')
             details=[]
             if item.get('evidenceType'): details.append(f"Evidence: {item['evidenceType']}")
