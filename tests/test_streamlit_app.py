@@ -44,6 +44,7 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('areaLabel', source)
         self.assertIn('time_after_first_fetch', source)
         self.assertIn('Identified:', source)
+        self.assertIn('named-place', (Path(__file__).resolve().parents[1] / 'locations.py').read_text(encoding='utf-8'))
 
 
 if __name__ == '__main__':

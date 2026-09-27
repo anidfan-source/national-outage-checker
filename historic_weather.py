@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+from locations import named_place_point
 
 ARCHIVE_URL = 'https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service'
 DATA_FILE = Path(__file__).resolve().parent / 'reference' / 'nswws_metadata_2026.json'
@@ -21,6 +22,7 @@ def fetch_historic_weather_warnings():
         if not all(isinstance(value, str) and value.strip() for value in (warning_id, issued, classification, element, region)):
             raise ValueError('Historic weather metadata row is incomplete')
         issued_at = datetime.fromisoformat(issued).replace(tzinfo=timezone.utc).isoformat()
+        point=named_place_point(region)
         records.append({
             'id': 'metoffice-historic:' + warning_id,
             'sourceId': 'metoffice-historic',
@@ -38,6 +40,6 @@ def fetch_historic_weather_warnings():
             'current': False,
             'stale': False,
             'evidenceType': 'historic-warning-metadata',
-            'attribution': 'Met Office NSWWS Metadata 2026 workbook; Crown Copyright',
+            'locationPoints': [point] if point else [], 'attribution': 'Met Office NSWWS Metadata 2026 workbook; Crown Copyright',
         })
     return records

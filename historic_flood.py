@@ -5,6 +5,7 @@ import json
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
+from locations import named_place_point
 
 
 DATASET_URL = ('https://environment.data.gov.uk/api/file/download?'
@@ -31,6 +32,7 @@ def fetch_historic_flood_warnings(fetch=None):
         except ValueError:
             continue
         area, code, name, warning_type = cells[1:5]
+        point=named_place_point(name, area)
         result.append({
             'id': 'ea-historic:' + code + ':' + cells[0], 'sourceId': 'ea-historic',
             'provider': 'Environment Agency historic flood warnings', 'category': 'environment',
@@ -38,7 +40,7 @@ def fetch_historic_flood_warnings(fetch=None):
             'region': area or name, 'date': started, 'observedAt': datetime.now(timezone.utc).isoformat(),
             'status': 'historic', 'current': False, 'stale': False, 'url': DATASET_URL,
             'postcodeAreas': [], 'reportedPostcodeAreas': [], 'inferredPostcodeAreas': [],
-            'telephoneAreas': [], 'locationPoints': [], 'evidenceType': 'historic-environment-context',
+            'telephoneAreas': [], 'locationPoints': [point] if point else [], 'evidenceType': 'historic-environment-context',
             'attribution': 'Environment Agency historic flood warnings, Open Government Licence v3.0',
         })
     return result

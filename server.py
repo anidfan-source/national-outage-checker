@@ -59,6 +59,24 @@ def weather_warning_region(title, description, fallback):
 def safe_url(value, fallback):
     return value if value and urllib.parse.urlsplit(value).scheme in ('https', 'http') else fallback
 
+def flood_area_centroid(item):
+    """Read the EA's published flood-area centroid without inferring a warning boundary."""
+    area=item.get('floodArea') or {}
+    if not isinstance(area, dict): area={}
+    lat,lng=area.get('lat'),area.get('long')
+    if lat is None or lng is None:
+        code=item.get('floodAreaID')
+        if code:
+            try:
+                raw=fetch('https://environment.data.gov.uk/flood-monitoring/id/floodAreas/'+urllib.parse.quote(str(code),safe=''))
+                payload=json.loads(raw)
+                area=payload.get('items',payload)
+                if isinstance(area,list): area=area[0] if area else {}
+                lat,lng=area.get('lat'),area.get('long')
+            except Exception:
+                return None,None
+    return lat,lng
+
 def fetch(url):
     req = urllib.request.Request(url, headers={'User-Agent': 'UK-Outage-Viewer/1.0', 'Accept': 'application/json, application/xml, text/xml, */*'})
     with urllib.request.urlopen(req, timeout=18) as response:
@@ -128,9 +146,13 @@ def parse(source, raw):
     if kind == 'flood':
         if not isinstance(data.get('items'), list):
             raise ValueError('Missing flood items')
-        return [event(source, x.get('floodAreaID') or x['@id'], x.get('description'), x.get('timeRaised'),
-                      'resolved' if x.get('severityLevel') == 4 else 'warning', x.get('message'),
-                      source['website'], region=x.get('eaAreaName') or source['scope']) for x in data['items']]
+        records=[]
+        for x in data['items']:
+            lat,lng=flood_area_centroid(x)
+            records.append(event(source, x.get('floodAreaID') or x['@id'], x.get('description'), x.get('timeRaised'),
+                                 'resolved' if x.get('severityLevel') == 4 else 'warning', x.get('message'),
+                                 source['website'], lat,lng,x.get('eaAreaName') or source['scope']))
+        return records
     if kind == 'npg':
         if not isinstance(data.get('results'), list):
             raise ValueError('Missing power cut records')
