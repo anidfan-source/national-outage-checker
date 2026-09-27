@@ -109,6 +109,12 @@ def get_spen_pages(source, fetch):
 def collect_public(source, fetch, make_event, parse_date):
     if source['kind'] == 'spen':
         data = get_spen_pages(source, fetch)
+    elif source['kind'] == 'radar':
+        token = os.getenv('CLOUDFLARE_API_TOKEN')
+        if not token:
+            raise RuntimeError('CLOUDFLARE_API_TOKEN is not configured')
+        url = source['url'] + '?' + urlencode({'location':'GB','dateRange':'7d','format':'json','limit':100})
+        data = json.loads(fetch(url, headers={'Authorization': 'Bearer ' + token}))
     else:
         data = json.loads(fetch(source['url'])) if source['kind'] == 'ssen' else get_pages(source, fetch)
     records = normalize(source, data, make_event, parse_date)
@@ -125,6 +131,9 @@ def collect_public(source, fetch, make_event, parse_date):
     elif source['kind'] == 'ioda':
         details['attribution'] = data.get('copyright') or 'IODA / Georgia Tech'
         details['coverage'] = 'UK-related events overlapping the preceding 24h. Signals may overlap.'
+    elif source['kind'] == 'radar':
+        details['attribution'] = 'Cloudflare Radar, CC BY-NC 4.0'
+        details['coverage'] = 'Cloudflare-verified UK outages published during the preceding seven days.'
     if details.get('sourceUpdatedAt'):
         details['dataStale'] = outdated(details['sourceUpdatedAt'], parse_date)
     return records, details
@@ -231,6 +240,32 @@ def normalize(source, data, make_event, parse_date):
                         signalScore=x.get('score'), signalDurationSeconds=x.get('duration'), sourceStatus=x.get('status'),
                         entity=x['location'], attribution=data.get('copyright') or 'IODA / Georgia Tech')
             result.append(item)
+    elif kind == 'radar':
+        annotations = (data.get('result') or {}).get('annotations')
+        if data.get('success') is not True or not isinstance(annotations, list):
+            raise ValueError('Invalid Cloudflare Radar outage snapshot')
+        for x in annotations:
+            locations = x.get('locations') or []
+            if locations and 'GB' not in locations:
+                continue
+            started = parse_date(x.get('startDate'))
+            if not started:
+                raise ValueError('Cloudflare Radar outage has no start time')
+            outage = x.get('outage') or {}
+            identity = '|'.join(str(v) for v in (started, x.get('scope'), ','.join(map(str,x.get('asns') or []))))
+            key = hashlib.sha256(identity.encode()).hexdigest()[:24]
+            scope = x.get('scope') or 'United Kingdom'
+            cause = str(outage.get('outageCause') or 'unknown cause').replace('_',' ').lower()
+            outage_type = str(outage.get('outageType') or 'network').replace('_',' ').lower()
+            item = make_event(source, key, 'Cloudflare Radar outage: ' + scope, started,
+                'resolved' if x.get('endDate') else 'observed-signal',
+                f'Cloudflare-verified {outage_type} outage; reported cause: {cause}. This is network-level evidence, not a household diagnosis.',
+                x.get('linkedUrl') or source['website'], region=scope)
+            item.update(evidenceType='network-signal', estimatedRestorationAt=parse_date(x.get('endDate')),
+                asns=x.get('asns') or [], outageCause=outage.get('outageCause'), outageType=outage.get('outageType'),
+                attribution='Cloudflare Radar, CC BY-NC 4.0')
+            result.append(item)
     else:
         raise ValueError('Unsupported public connector')
     return list({r['id']:r for r in result}.values())
+
