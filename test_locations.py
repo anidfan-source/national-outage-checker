@@ -1,5 +1,5 @@
 import unittest
-from locations import CODES, enrich, telephone_matches
+from locations import CODES, distance_km, enrich, telephone_matches
 
 class LocationTests(unittest.TestCase):
     def item(self, title='', description='', **extra):
@@ -58,4 +58,9 @@ class LocationTests(unittest.TestCase):
         self.assertEqual(item['telephoneAreas'][0]['code'],code)
         self.assertEqual(item['locationPoints'],[])
 
+    def test_distance_separates_distant_places_in_same_postcode_area(self):
+        self.assertLess(distance_km(55.85,-4.42,55.84,-4.43),2)
+        self.assertGreater(distance_km(55.85,-4.42,55.43,-5.61),80)
+
 if __name__=='__main__':unittest.main()
+
