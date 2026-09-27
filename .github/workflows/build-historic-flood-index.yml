@@ -1,0 +1,32 @@
+name: Build historic flood index
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '20 3 1 */3 *'
+  push:
+    branches: [main]
+    paths:
+      - historic_flood.py
+      - locations.py
+      - scripts/build_historic_flood_index.py
+      - .github/workflows/build-historic-flood-index.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/build_historic_flood_index.py
+      - run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add reference/historic_flood_index.json.gz
+          git diff --cached --quiet || git commit -m 'Refresh historic flood index'
+          git push

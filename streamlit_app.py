@@ -169,11 +169,18 @@ def filters(data, page_categories=None):
     now=datetime.now(timezone.utc); since=now if mode=='Live' else now.replace(hour=0,minute=0,second=0,microsecond=0)-timedelta(days=days-1)
     incident_data=data
     if mode=='History' and 'environment' in categories:
+        window_start=since.isoformat()
         try:
-            window_start=since.isoformat()
-            incident_data={**data,'incidents':data['incidents']+load_historic_flood_warnings(window_start)+load_historic_weather_warnings(window_start)}
+            flood_history=load_historic_flood_warnings(window_start)
         except Exception as error:
-            st.sidebar.warning(f'Historic environmental archive unavailable: {type(error).__name__}')
+            flood_history=[]
+            st.sidebar.info('Historic flood index is being prepared. Met Office history remains available.')
+        try:
+            weather_history=load_historic_weather_warnings(window_start)
+        except Exception as error:
+            weather_history=[]
+            st.sidebar.warning(f'Historic weather archive unavailable: {type(error).__name__}')
+        incident_data={**data,'incidents':data['incidents']+flood_history+weather_history}
     records=filtered_incidents(incident_data,categories,provider,location,query,mode,since)
     summary={'mode':mode.lower(),'categories':categories,'provider':None if provider=='All providers' else provider,'location':location_query,'locationInterpretation':message or None,'search':query,'timeWindow':'current feed records' if mode=='Live' else f'last {days} calendar days','from':None if mode=='Live' else since.isoformat(),'through':now.isoformat()}
     return records,summary
