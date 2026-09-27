@@ -6,5 +6,5 @@ workers_dev = true
 [[d1_databases]]
 binding = "DB"
 database_name = "national-outage-street-manager"
-database_id = "REPLACE_AFTER_CREATING_D1_DATABASE"
+database_id = "fbba3cee-e93a-44a0-923c-815bb5884bc0"
 migrations_dir = "migrations"
