@@ -44,6 +44,21 @@ def configure_street_manager():
     except Exception:
         pass
 
+@st.cache_data(ttl=120, show_spinner='Refreshing public outage feeds…')
+def load_dashboard():
+    """Refresh the collectors and return a consistent dashboard snapshot."""
+    server.init_db()
+    server.refresh()
+    return server.snapshot()
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_historic_flood_warnings():
+    return fetch_historic_flood_warnings()
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_historic_weather_warnings():
+    return fetch_historic_weather_warnings()
+
 def text(value): return str(value or '').casefold()
 
 def selected_location(value, reference):
@@ -217,5 +232,4 @@ try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
 
 navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
-navigation.run()
 navigation.run()
