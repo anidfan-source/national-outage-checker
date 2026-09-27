@@ -218,3 +218,4 @@ except Exception as error: st.error(f'Unable to collect feeds: {type(error).__na
 
 navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
 navigation.run()
+navigation.run()
