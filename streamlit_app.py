@@ -27,6 +27,7 @@ CATEGORY_COLORS = {
     'routing':[230, 126, 34, 220],
 }
 CLOSED = {'resolved','completed','postmortem'}
+NOT_ONGOING = CLOSED | {'scheduled'}
 
 def street_manager_configured():
     """Return True when the Street Manager Open Data receiver is configured."""
@@ -90,6 +91,10 @@ def selected_location(value, reference):
     if normal.startswith('0044'): normal='0'+normal[4:].lstrip('0')
     code=next((entry for entry in reference.get('codes',[]) if entry['code']==normal),None)
     if code: return {'code':normal,'areas':code['postcodeAreas']}, f"{normal} · {code['place']} → {', '.join(code['postcodeAreas']) or 'postcode association unavailable'} (approximate)"
+    place_matches=[entry for entry in reference.get('codes',[]) if entry.get('place','').casefold()==raw_query.casefold()]
+    if place_matches:
+        areas=sorted({area for entry in place_matches for area in entry.get('postcodeAreas',[])})
+        return {'code':None,'areas':areas,'place':raw_query.casefold()}, f"Town/city match: {raw_query} → {', '.join(areas) or 'postcode association unavailable'} (approximate town/city match)"
     match=re.match(r'^([A-Z]{1,2})(?:\d[A-Z\d]?(?:\d[A-Z]{2})?)?$',query.replace(' ',''))
     if match: return {'code':None,'areas':[match.group(1)]}, f'Postcode area {match.group(1)} · not a household match'
     if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{2,}", raw_query):
@@ -99,8 +104,9 @@ def selected_location(value, reference):
 def location_match(item, selection):
     if not selection: return True
     if selection['code'] and any(code.get('code')==selection['code'] for code in item.get('telephoneAreas',[])): return True
-    if selection['areas']:
-        return any(area in selection['areas'] for area in item.get('postcodeAreas',[]))
+    if selection['areas'] and any(area in selection['areas'] for area in item.get('postcodeAreas',[])): return True
+    place=selection.get('place')
+    if place and place in ' '.join(str(item.get(field) or '') for field in ('region','localAuthority','country','title','description')).casefold(): return True
     geography=selection.get('geography')
     if geography:
         fields=('region','localAuthority','country','title','description')
@@ -113,7 +119,7 @@ def filtered_incidents(data, categories, provider, location, query, mode, since)
         if item.get('category') not in categories or (provider!='All providers' and item.get('sourceId')!=provider): continue
         searchable=' '.join([text(item.get(key)) for key in ('title','provider','region','description')]+[text(v) for v in item.get('postcodeAreas',[])]+[text(x.get('code'))+' '+text(x.get('place')) for x in item.get('telephoneAreas',[])])
         if (query and query.casefold() not in searchable) or not location_match(item,location): continue
-        if mode=='Live' and not (item.get('current') and item.get('status') not in CLOSED): continue
+        if mode=='Live' and not (item.get('current') and item.get('status') not in NOT_ONGOING): continue
         if mode=='History':
             try:
                 if not item.get('date') or datetime.fromisoformat(item['date'])<since: continue
@@ -180,6 +186,16 @@ def map_records(records):
         st.pydeck_chart(chart,width='stretch')
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
+def impact_weight(item):
+    try: return max(1, min(50, int(item.get('customersAffected') or item.get('affectedCount') or 1) ** 0.5))
+    except (TypeError, ValueError): return 1
+
+def impact_heatmap(records):
+    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item)} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    if not points: st.info('No mapped locations match these filters.'); return
+    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]])],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    st.pydeck_chart(chart,width='stretch')
+
 def incident_list(records, title='Published evidence'):
     st.subheader(f'{title} ({len(records)})')
     if not records: st.info('No matching records. This does not confirm normal service; inspect Source health for connection status.'); return
@@ -216,6 +232,16 @@ def correlated_view():
         else: st.caption('No dated records in this selection.')
         exports(records,DATA,summary)
     incident_list(records,'All matching evidence')
+
+def trends_view():
+    header(DATA,'Area trends','Impact by area','Concentration of matching published evidence, not verified household impact.')
+    records,summary=filters(DATA)
+    st.subheader('UK impact heatmap'); st.caption('The map is locked to the UK. Reported customer counts add weight only when supplied by a source.')
+    impact_heatmap(records)
+    areas=Counter(area for item in records for area in (item.get('postcodeAreas') or [item.get('region') or 'Location not supplied'])[:3])
+    st.subheader('Areas with the most matching evidence')
+    if areas: st.bar_chart({area:areas[area] for area,_ in areas.most_common(15)})
+    exports(records,DATA,summary); incident_list(records,'Evidence contributing to the trends')
 
 def category_view(key,title,description):
     header(DATA,CATEGORY_LABELS[key],title,description); records,summary=filters(DATA,[key])
@@ -274,5 +300,5 @@ configure_spen()
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
 
-navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
+navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
 navigation.run()

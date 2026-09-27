@@ -32,6 +32,10 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('Country, county or local-authority match', source)
         self.assertIn('maxBounds', source)
         self.assertIn('CATEGORY_COLORS', source)
+        self.assertIn('NOT_ONGOING', source)
+        self.assertIn('approximate town/city match', source)
+        self.assertIn('HeatmapLayer', source)
+        self.assertIn('trends_view', source)
 
 
 if __name__ == '__main__':
