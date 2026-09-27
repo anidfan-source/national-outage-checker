@@ -17,19 +17,19 @@ the Streamlit dashboard.
    `npx wrangler secret put READ_TOKEN`
 7. Deploy:
    `npm install && npm run typecheck && npm run deploy`
-8. Verify `https://national-outage-street-manager.<account>.workers.dev/health`.
+8. Verify `https://national-outage-street-manager.anidfan-national-outage.workers.dev/health`.
 
 Use these URLs in DfT Open Data onboarding:
 
-- `https://...workers.dev/street-manager/permit`
-- `https://...workers.dev/street-manager/activity`
-- `https://...workers.dev/street-manager/section-58`
+- `https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/permit`
+- `https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/activity`
+- `https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/section-58`
 
 Configure Streamlit with the Worker origin and the same read token:
 
 ```toml
 [street_manager]
-webhook_url = "https://national-outage-street-manager.<account>.workers.dev"
+webhook_url = "https://national-outage-street-manager.anidfan-national-outage.workers.dev"
 webhook_token = "the-read-token"
 ```
 
