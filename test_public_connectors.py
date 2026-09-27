@@ -72,8 +72,18 @@ class PublicConnectorTests(unittest.TestCase):
         self.assertIsNone(rows[0]['lat'])
         self.assertEqual(rows[0]['signalDurationSeconds'],60)
 
+    def test_cloudflare_radar_outage(self):
+        payload={'success':True,'result':{'annotations':[{'startDate':'2026-09-27T10:00:00Z','endDate':None,
+            'locations':['GB'],'scope':'Northern England','asns':[1234],'linkedUrl':'https://example.com/report',
+            'outage':{'outageCause':'POWER_OUTAGE','outageType':'REGIONAL'}}]}}
+        rows=self.normalize('radar',payload)
+        self.assertEqual(rows[0]['status'],'observed-signal')
+        self.assertEqual(rows[0]['region'],'Northern England')
+        self.assertEqual(rows[0]['asns'],[1234])
+        self.assertEqual(rows[0]['outageCause'],'POWER_OUTAGE')
+
     def test_error_payloads_are_not_successful_empty_feeds(self):
-        for kind,data in [('ssen',{'faults':[],'errorMessage':'failed'}),('nged',{'success':False}),('ripe',{}),('ioda',{'data':[],'error':'failed'})]:
+        for kind,data in [('ssen',{'faults':[],'errorMessage':'failed'}),('nged',{'success':False}),('ripe',{}),('ioda',{'data':[],'error':'failed'}),('radar',{'success':False})]:
             with self.subTest(kind=kind),self.assertRaises(ValueError):self.normalize(kind,data)
 
     def test_nged_pagination(self):
@@ -112,3 +122,4 @@ class PublicConnectorTests(unittest.TestCase):
         self.assertIsNone(rows[0]['lat'])
 
 if __name__=='__main__':unittest.main()
+
