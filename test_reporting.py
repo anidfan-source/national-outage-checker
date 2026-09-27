@@ -2,7 +2,7 @@ import csv
 import io
 import unittest
 
-from reporting import csv_bytes, report
+from reporting import csv_bytes, report, source_health_csv_bytes
 
 
 class ReportingTests(unittest.TestCase):
@@ -22,10 +22,19 @@ class ReportingTests(unittest.TestCase):
         )
         output = csv_bytes(payload).decode('utf-8-sig')
         rows = list(csv.DictReader(io.StringIO(output)))
-        incident = next(row for row in rows if row['record_type'] == 'incident')
-        self.assertEqual(incident['title'], "'=SUM(1,1)")
+        incident = rows[0]
+        self.assertEqual(incident['incident'], "'=SUM(1,1)")
         self.assertEqual(incident['description'], 'Quoted "text", café\nand newline')
+        self.assertNotIn('source_state', incident)
+
+    def test_source_health_has_its_own_compact_table(self):
+        payload=report([], [{'name':'Feed','category':'broadband','state':'connected','count':3}], {}, '2026-01-01')
+        rows=list(csv.DictReader(io.StringIO(source_health_csv_bytes(payload).decode('utf-8-sig'))))
+        self.assertEqual(rows[0]['source'],'Feed')
+        self.assertEqual(rows[0]['records_returned'],'3')
+        self.assertNotIn('incident',rows[0])
 
 
 if __name__ == '__main__':
     unittest.main()
+
