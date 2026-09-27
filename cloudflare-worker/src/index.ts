@@ -106,8 +106,7 @@ async function verifySns(message: SnsMessage, topic: string): Promise<boolean> {
   );
 }
 
-async function receive(request: Request, env: Env, topic: string): Promise<Response> {
-  if (!(topic in TOPICS)) return json({ error: "Unknown Street Manager topic" }, 404);
+async function receive(request: Request, env: Env, requestedTopic: string | null): Promise<Response> {
   const headerType = request.headers.get("x-amz-sns-message-type");
   if (!headerType) return json({ error: "SNS message header required" }, 400);
   let message: SnsMessage;
@@ -117,6 +116,8 @@ async function receive(request: Request, env: Env, topic: string): Promise<Respo
     return json({ error: "Invalid JSON" }, 400);
   }
   if (message.Type !== headerType) return json({ error: "SNS message type mismatch" }, 400);
+  const topic = requestedTopic || Object.keys(TOPICS).find((name) => TOPICS[name] === message.TopicArn);
+  if (!topic || !(topic in TOPICS)) return json({ error: "Unknown Street Manager topic" }, 403);
   try {
     if (!(await verifySns(message, topic))) return json({ error: "Invalid SNS signature or topic" }, 403);
   } catch {
@@ -176,6 +177,9 @@ export default {
       return json({ ok: true, topics: Object.keys(TOPICS), storage: "D1" });
     }
     if (request.method === "GET" && url.pathname === "/api/events") return events(request, env);
+    if (request.method === "POST" && url.pathname === "/street-manager/open-data") {
+      return receive(request, env, null);
+    }
     const match = url.pathname.match(/^\/street-manager\/(permit|activity|section-58)$/);
     if (request.method === "POST" && match) return receive(request, env, match[1]);
     return json({ error: "Not found" }, 404);
