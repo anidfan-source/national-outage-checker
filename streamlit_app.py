@@ -61,6 +61,12 @@ def load_historic_weather_warnings():
 
 def text(value): return str(value or '').casefold()
 
+def grouped_sources(sources):
+    """Return monitored and portal-only sources in stable display order."""
+    ordered=sorted(sources,key=lambda x:(x.get('category',''),x.get('name','')))
+    portal=lambda source: source.get('kind')=='portal' or source.get('state')=='portal-only'
+    return [source for source in ordered if not portal(source)], [source for source in ordered if portal(source)]
+
 def selected_location(value, reference):
     query=value.strip().upper()
     if not query: return None, ''
@@ -200,14 +206,21 @@ def sources_view():
     states=Counter(s.get('state','unknown') for s in DATA['sources'])
     for col,state in zip(st.columns(4),('connected','stale','unavailable','portal-only')): col.metric(state.replace('-',' ').title(),states.get(state,0))
     exports(records,DATA,summary)
-    for source in sorted(DATA['sources'],key=lambda x:(x.get('category',''),x.get('name',''))):
-        with st.expander(f"{source['name']} · {source.get('state','unknown')}"):
-            st.write(source.get('note') or source.get('scope')); st.caption(f"{CATEGORY_LABELS.get(source.get('category'),source.get('category'))} · {source.get('scope')}")
-            st.caption(f"Last attempt: {source.get('checkedAt') or 'not attempted'} · Last success: {source.get('lastSuccess') or 'not available'}")
-            if source.get('sourceUpdatedAt'): st.caption('Source updated: '+source['sourceUpdatedAt'])
-            if source.get('coverage'): st.caption(source['coverage'])
-            if source.get('error'): st.error(source['error'])
-            if source.get('website'): st.link_button('Open provider / source',source['website'])
+    monitored,portal_only=grouped_sources(DATA['sources'])
+    for section,sources,description in (
+        ('Automated and monitored sources',monitored,'Feeds checked automatically by the dashboard.'),
+        ('Portal-only sources',portal_only,'Provider pages that require a manual check; these are not automated outage feeds.'),
+    ):
+        st.subheader(f'{section} ({len(sources)})')
+        st.caption(description)
+        for source in sources:
+            with st.expander(f"{source['name']} · {source.get('state','unknown')}"):
+                st.write(source.get('note') or source.get('scope')); st.caption(f"{CATEGORY_LABELS.get(source.get('category'),source.get('category'))} · {source.get('scope')}")
+                st.caption(f"Last attempt: {source.get('checkedAt') or 'not attempted'} · Last success: {source.get('lastSuccess') or 'not available'}")
+                if source.get('sourceUpdatedAt'): st.caption('Source updated: '+source['sourceUpdatedAt'])
+                if source.get('coverage'): st.caption(source['coverage'])
+                if source.get('error'): st.error(source['error'])
+                if source.get('website'): st.link_button('Open provider / source',source['website'])
 
 def broadband_view(): category_view('broadband','Broadband & provider notices','Direct provider notices and connectivity reports that may affect a home connection.')
 def power_view(): category_view('electricity','Power cuts & infrastructure','Power incidents can interrupt home routers, street cabinets and local network equipment.')
