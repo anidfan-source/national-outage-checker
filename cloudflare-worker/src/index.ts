@@ -129,6 +129,12 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
     if (!subscribeUrl) return json({ error: "Invalid SNS confirmation URL" }, 403);
     const confirmation = await fetch(subscribeUrl);
     if (!confirmation.ok) return json({ error: "SNS confirmation failed" }, 502);
+    await env.DB.prepare(
+      `INSERT INTO subscription_status(topic, confirmed_at, last_confirmation_message_id)
+       VALUES (?, datetime('now'), ?)
+       ON CONFLICT(topic) DO UPDATE SET confirmed_at=excluded.confirmed_at,
+       last_confirmation_message_id=excluded.last_confirmation_message_id`,
+    ).bind(topic, message.MessageId).run();
     return json({ ok: true, confirmed: true, topic });
   }
   if (message.Type !== "Notification") return json({ ok: true, ignored: true });
@@ -143,14 +149,23 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
   if (objectType && !OBJECT_TYPES[topic].has(objectType)) {
     return json({ error: "Event object type does not match endpoint" }, 400);
   }
-  await env.DB.prepare(
-    `INSERT OR IGNORE INTO messages
-     (message_id, received_at, event_time, event_type, object_reference, object_type, topic, payload)
-     VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)`,
-  ).bind(
-    message.MessageId, event.event_time || null, event.event_type || null,
-    event.object_reference || null, objectType, topic, JSON.stringify(event),
-  ).run();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT OR IGNORE INTO messages
+       (message_id, received_at, event_time, event_type, object_reference, object_type, topic, payload)
+       VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      message.MessageId, event.event_time || null, event.event_type || null,
+      event.object_reference || null, objectType, topic, JSON.stringify(event),
+    ),
+    env.DB.prepare(
+      `INSERT INTO topic_activity(topic, last_event_at, last_received_at, event_count)
+       VALUES (?, ?, datetime('now'), 1)
+       ON CONFLICT(topic) DO UPDATE SET last_event_at=excluded.last_event_at,
+       last_received_at=excluded.last_received_at, event_count=topic_activity.event_count + 1`,
+    ).bind(topic, event.event_time || null),
+    env.DB.prepare("DELETE FROM messages WHERE received_at < datetime('now', '-366 days')"),
+  ]);
   return json({ ok: true, topic });
 }
 
@@ -170,6 +185,27 @@ async function events(request: Request, env: Env): Promise<Response> {
   return json({ ok: true, events: result.results.map((row) => JSON.parse(row.payload)) });
 }
 
+async function status(request: Request, env: Env): Promise<Response> {
+  if (!env.READ_TOKEN || request.headers.get("authorization") !== `Bearer ${env.READ_TOKEN}`) {
+    return json({ error: "Unauthorized" }, 401);
+  }
+  const [subscriptions, activity, totals] = await env.DB.batch([
+    env.DB.prepare("SELECT topic, confirmed_at FROM subscription_status ORDER BY topic"),
+    env.DB.prepare(
+      "SELECT topic, last_event_at, last_received_at, event_count FROM topic_activity ORDER BY topic",
+    ),
+    env.DB.prepare("SELECT topic, COUNT(*) AS stored_count FROM messages GROUP BY topic ORDER BY topic"),
+  ]);
+  return json({
+    ok: true,
+    expectedTopics: Object.keys(TOPICS),
+    subscriptions: subscriptions.results,
+    activity: activity.results,
+    stored: totals.results,
+    retentionDays: 366,
+  });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -177,6 +213,7 @@ export default {
       return json({ ok: true, topics: Object.keys(TOPICS), storage: "D1" });
     }
     if (request.method === "GET" && url.pathname === "/api/events") return events(request, env);
+    if (request.method === "GET" && url.pathname === "/api/status") return status(request, env);
     if (request.method === "POST" && url.pathname === "/street-manager/open-data") {
       return receive(request, env, null);
     }
