@@ -18,6 +18,13 @@ st.markdown('''<style>
 [data-testid="stMetric"] {background:#f7f9fc;border:1px solid #e4e9f1;border-radius:14px;padding:12px}
 [data-testid="stMetric"] [data-testid="stMetricLabel"], [data-testid="stMetric"] [data-testid="stMetricValue"] {color:#101828!important}
 [data-testid="stSidebar"] {background:#101828} [data-testid="stSidebar"] * {color:#f8fafc}
+[data-testid="stSidebar"] input, [data-testid="stSidebar"] textarea {
+  color:#101828!important; -webkit-text-fill-color:#101828!important; caret-color:#101828!important;
+}
+[data-testid="stSidebar"] input::placeholder, [data-testid="stSidebar"] textarea::placeholder {
+  color:#667085!important; -webkit-text-fill-color:#667085!important; opacity:1;
+}
+[data-testid="stSidebar"] [data-testid="InputInstructions"] {color:#667085!important}
 .eyebrow {color:#087f5b;font-weight:700;letter-spacing:.08em;font-size:.75rem;text-transform:uppercase}
 </style>''', unsafe_allow_html=True)
 
