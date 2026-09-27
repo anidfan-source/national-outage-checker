@@ -47,6 +47,7 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('chronology is inconsistent', source)
         self.assertIn("ZoneInfo('Europe/London')", source)
         self.assertIn('def display_time', source)
+        self.assertIn('-webkit-text-fill-color:#101828', source)
         self.assertIn('Identified:', source)
         self.assertIn('named-place', (Path(__file__).resolve().parents[1] / 'locations.py').read_text(encoding='utf-8'))
         self.assertIn('load_historic_flood_warnings(window_start)', source)
