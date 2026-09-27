@@ -61,13 +61,13 @@ Add a source in `sources.py` using `feed(...)`. Existing adapters support Status
 
 Street Manager is integrated through DfT Open Data notifications rather than authenticated V6 API-user polling. DfT sends AWS SNS HTTPS POST messages to a Cloudflare Worker in `cloudflare-worker/`. The Worker supports the Permit, Activity and Section 58 production topics, verifies SNS signatures and exact topic ARNs before confirming subscriptions or accepting notifications, deduplicates SNS retries, and persists events in Cloudflare D1.
 
-Deploy `cloudflare-worker/` on the Cloudflare Workers Free plan using its README. No payment card is required. Enter these receiver endpoints in the Street Manager Open Data onboarding form:
+Deploy `cloudflare-worker/` on the Cloudflare Workers Free plan using its README. No payment card is required. Enter this unified receiver endpoint in the Street Manager Open Data onboarding form:
 
 ```
-Permit:    https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/permit
-Activity:  https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/activity
-Section58: https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/section-58
+https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/open-data
 ```
+
+It accepts Permit, Activity and Section 58 topics and validates the signed topic ARN. Topic-specific aliases remain available under `/street-manager/permit`, `/street-manager/activity` and `/street-manager/section-58`.
 
 Do not enter the Streamlit application URL. The receiver must be directly reachable by AWS SNS over HTTPS.
 
