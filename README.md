@@ -43,7 +43,7 @@ An earlier verification snapshot covered 19 of the then-configured automatic fee
 - Failed feeds retain their previous records with a **stale** label. A successful empty feed is different from an unavailable feed. On restart, persisted data remains stale until its source reconnects. Last-success timestamps are held in memory; record observation timestamps persist.
 - Live view shows current non-resolved entries including notices and planned work. History filters apply to incident start/publication dates. Undated notices remain in live view but cannot be charted. The chart always shows collected history, respecting category/provider/search filters; daily mode covers 30 days and monthly mode covers the selected number of months.
 - Telephone area codes and postcodes in incident text enrich locations and postcode-area search. No postcode-to-household correlation, account-based line diagnostics or automatic causality claims are implemented.
-- The Streamlit app caches a collection for five minutes. **Refresh feeds now** clears this cache and collects again. Streamlit report downloads contain every matching incident, not only the expanded on-screen results, along with the active filters and full source health. CSV output prefixes spreadsheet-formula-like values to prevent execution in spreadsheet programs.
+- The Streamlit app caches a collection for five minutes. **Refresh feeds now** clears this cache and collects again. Downloads provide a compact one-row-per-incident CSV, a separate one-row-per-source health CSV, and a complete JSON report. CSV output prefixes spreadsheet-formula-like values to prevent execution in spreadsheet programs.
 
 ## Sources and attribution
 
@@ -110,3 +110,4 @@ A bundled Ofcom/GeoNames reference contains 771 geographic codes/prefixes, 684 w
 Only standalone codes in incident context are used; contact/support numbers and non-geographic numbers are ignored. Existing source coordinates take priority, then published postcode district points, then inferred telephone locality points. Approximate points have hollow dashed markers. The incident list shows evidence and conflicting associations. Multiple locations remain one incident in totals. This also enriches previously collected history at read time.
 
 See [reference methodology, attribution and limitations](reference/README.md). The offline reference needs no runtime geocoder or credentials. Regenerate with `python3 scripts/build_location_reference.py` and review its diff before adopting new data.
+
