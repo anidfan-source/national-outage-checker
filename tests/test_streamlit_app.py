@@ -36,6 +36,9 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('approximate town/city match', source)
         self.assertIn('HeatmapLayer', source)
         self.assertIn('trends_view', source)
+        self.assertIn('lock_map_selection', source)
+        self.assertIn("on_select='rerun'", source)
+        self.assertIn('map_area_pending', source)
 
 
 if __name__ == '__main__':
