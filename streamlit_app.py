@@ -169,6 +169,13 @@ def time_after_first_fetch(item):
     except (KeyError, TypeError, ValueError):
         return False
 
+def provider_time_after_fetch(item):
+    """Flag impossible source chronology without rewriting provider-supplied evidence."""
+    try:
+        return datetime.fromisoformat(item['date']) > datetime.fromisoformat(item['observedAt'])
+    except (KeyError, TypeError, ValueError):
+        return False
+
 def filters(data, page_categories=None):
     names={source['id']:source['name'] for source in data['sources']}
     if st.session_state.get('map_area_pending'):
@@ -261,7 +268,10 @@ def incident_list(records, title='Published evidence'):
     for item in records:
         with st.expander(f"{item.get('provider')} · {item.get('title')}"):
             st.write(item.get('description') or 'No public description supplied.')
-            if time_after_first_fetch(item):
+            if provider_time_after_fetch(item):
+                st.caption(f"Status: {item.get('status')} · Identified: {display_time(item.get('identifiedAt') or item.get('observedAt'))} · Provider timestamp: {display_time(item.get('date'))} · Last fetched: {display_time(item.get('observedAt'))}")
+                st.warning('The provider timestamp is later than this dashboard fetch. It is retained as published, but its chronology is inconsistent and may reflect a source clock or field issue.')
+            elif time_after_first_fetch(item):
                 st.caption(f"Status: {item.get('status')} · Identified: {display_time(item.get('identifiedAt') or item.get('observedAt'))} · Provider-reported time: {display_time(item.get('date'))} (after first fetch) · Last fetched: {display_time(item.get('observedAt'))}")
             else:
                 st.caption(f"Status: {item.get('status')} · Reported: {display_time(item.get('date'), 'not supplied')} · Last fetched: {display_time(item.get('observedAt'))}")
@@ -271,7 +281,7 @@ def incident_list(records, title='Published evidence'):
             if item.get('reportedPostcodeAreas'): details.append('Reported areas: '+', '.join(area_label(area) for area in item['reportedPostcodeAreas']))
             if item.get('telephoneAreas'): details.append('Telephone association (approximate): '+'; '.join(f"{x['code']} → {', '.join(x['postcodeAreas'])}" for x in item['telephoneAreas']))
             if item.get('customersAffected') is not None: details.append(f"Customers affected: {item['customersAffected']}")
-            if item.get('estimatedRestorationAt'): details.append('Estimated restoration: '+item['estimatedRestorationAt'])
+            if item.get('estimatedRestorationAt'): details.append('Estimated restoration: '+display_time(item['estimatedRestorationAt']))
             if details: st.caption(' · '.join(details))
             if item.get('url'): st.link_button('Open source',item['url'])
 
