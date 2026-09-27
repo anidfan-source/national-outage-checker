@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
+from zoneinfo import ZoneInfo
 
 import pydeck as pdk
 import streamlit as st
@@ -28,6 +29,19 @@ CATEGORY_COLORS = {
 }
 CLOSED = {'resolved','completed','postmortem'}
 NOT_ONGOING = CLOSED | {'scheduled'}
+LONDON = ZoneInfo('Europe/London')
+
+def display_time(value, fallback='not available'):
+    """Display stored UTC timestamps as UK civil time (BST in summer, GMT in winter)."""
+    if not value:
+        return fallback
+    try:
+        parsed = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(LONDON).strftime('%d %b %Y, %H:%M %Z')
+    except (TypeError, ValueError):
+        return str(value)
 
 def street_manager_configured():
     """Return True when the Street Manager Open Data receiver is configured."""
@@ -197,7 +211,7 @@ def filters(data, page_categories=None):
 def header(data, eyebrow, title, description):
     fresh=sum(s.get('state')=='connected' for s in data['sources'] if s.get('kind')!='portal'); stale=sum(s.get('state')=='stale' for s in data['sources'])
     st.markdown(f'<div class="eyebrow">{eyebrow}</div>',unsafe_allow_html=True); st.title(title); st.caption(description)
-    st.caption(f"Updated {data.get('updatedAt') or 'not available'} · {fresh} live feeds connected · {stale} stale source{'s' if stale!=1 else ''}")
+    st.caption(f"Updated {display_time(data.get('updatedAt'))} · {fresh} live feeds connected · {stale} stale source{'s' if stale!=1 else ''}")
 
 def exports(records, data, summary):
     payload=report(records,data['sources'],summary,data.get('updatedAt')); a,b=st.columns(2)
@@ -248,9 +262,9 @@ def incident_list(records, title='Published evidence'):
         with st.expander(f"{item.get('provider')} · {item.get('title')}"):
             st.write(item.get('description') or 'No public description supplied.')
             if time_after_first_fetch(item):
-                st.caption(f"Status: {item.get('status')} · Identified: {item.get('identifiedAt') or item.get('observedAt')} · Provider-reported time: {item.get('date')} (after first fetch) · Last fetched: {item.get('observedAt')}")
+                st.caption(f"Status: {item.get('status')} · Identified: {display_time(item.get('identifiedAt') or item.get('observedAt'))} · Provider-reported time: {display_time(item.get('date'))} (after first fetch) · Last fetched: {display_time(item.get('observedAt'))}")
             else:
-                st.caption(f"Status: {item.get('status')} · Reported: {item.get('date') or 'not supplied'} · Last fetched: {item.get('observedAt')}")
+                st.caption(f"Status: {item.get('status')} · Reported: {display_time(item.get('date'), 'not supplied')} · Last fetched: {display_time(item.get('observedAt'))}")
             if item.get('stale'): st.warning('This record is stale because its source is unavailable or its published data is old.')
             details=[]
             if item.get('evidenceType'): details.append(f"Evidence: {item['evidenceType']}")
@@ -319,8 +333,8 @@ def sources_view():
         for source in sources:
             with st.expander(f"{source['name']} · {source.get('state','unknown')}"):
                 st.write(source.get('note') or source.get('scope')); st.caption(f"{CATEGORY_LABELS.get(source.get('category'),source.get('category'))} · {source.get('scope')}")
-                st.caption(f"Last attempt: {source.get('checkedAt') or 'not attempted'} · Last success: {source.get('lastSuccess') or 'not available'}")
-                if source.get('sourceUpdatedAt'): st.caption('Source updated: '+source['sourceUpdatedAt'])
+                st.caption(f"Last attempt: {display_time(source.get('checkedAt'), 'not attempted')} · Last success: {display_time(source.get('lastSuccess'))}")
+                if source.get('sourceUpdatedAt'): st.caption('Source updated: '+display_time(source['sourceUpdatedAt']))
                 if source.get('coverage'): st.caption(source['coverage'])
                 if source.get('error'): st.error(source['error'])
                 if source.get('website'): st.link_button('Open provider / source',source['website'])
