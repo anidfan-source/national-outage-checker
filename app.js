@@ -21,7 +21,10 @@ if (window.L) {
   $('map').textContent = 'Map library unavailable. Incidents and data connections remain available below.';
 }
 const closed = new Set(['resolved', 'completed', 'postmortem']);
-const formatDate = value => value ? new Date(value).toLocaleString('en-GB') : 'Not supplied';
+const formatDate = value => value ? new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Europe/London', day: '2-digit', month: 'short', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', timeZoneName: 'short'
+}).format(new Date(value)) : 'Not supplied';
 function selectedCategories() {
   return new Set([...document.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.value));
 }
@@ -183,3 +186,4 @@ $('liveToggle').addEventListener('click', ()=>{
 $('showMore').addEventListener('click', ()=>{pageSize+=50;render();});
 load();
 setInterval(load, 15000);
+
