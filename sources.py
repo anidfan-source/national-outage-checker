@@ -16,12 +16,15 @@ for id, name, host in [
     ('zoom', 'Zoom', 'status.zoom.us'),
     ('dropbox', 'Dropbox', 'status.dropbox.com'),
     ('atlassian', 'Atlassian', 'status.atlassian.com'),
+    ('cisco-meraki', 'Cisco Meraki cloud services', 'status.meraki.net'),
+    ('ubiquiti', 'Ubiquiti cloud services', 'status.ui.com'),
 ]:
     feed(id, name, 'third-party', 'statuspage', f'https://{host}/api/v2/incidents.json', f'https://{host}',
          note='Service disruption may affect websites or apps; does not establish a home line fault.')
 feed('gcp', 'Google Cloud', 'third-party', 'google', 'https://status.cloud.google.com/incidents.json', 'https://status.cloud.google.com')
 feed('aws', 'Amazon Web Services', 'third-party', 'rss', 'https://status.aws.amazon.com/rss/all.rss', 'https://health.aws.amazon.com/health/status')
 feed('azure', 'Microsoft Azure', 'third-party', 'rss', 'https://status.azure.com/en-us/status/feed/', 'https://azure.status.microsoft/en-us/status/')
+feed('netgear', 'NETGEAR cloud services', 'third-party', 'rss', 'https://status.netgear.com/rss', 'https://status.netgear.com/', 'Global vendor cloud services', 'Covers NETGEAR Insight, Orbi, Nighthawk and related cloud services. A vendor-cloud incident does not establish a broadband access-line fault.')
 feed('aa', 'Andrews & Arnold', 'broadband', 'rss', 'https://aastatus.net/atom.cgi', 'https://aastatus.net', 'UK provider / location unspecified')
 feed('zen', 'Zen Broadband faults', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-faults-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified')
 feed('zen-maintenance', 'Zen Broadband maintenance', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-maintenance-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified', 'Planned work notices; check provider for current status.')
