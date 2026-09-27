@@ -59,6 +59,15 @@ def configure_spen():
     except Exception:
         pass
 
+def configure_cloudflare():
+    """Expose the read-only Radar token only to the collector process."""
+    try:
+        token = st.secrets.get('CLOUDFLARE_API_TOKEN') or st.secrets.get('cloudflare', {}).get('api_token')
+        if token:
+            os.environ['CLOUDFLARE_API_TOKEN'] = str(token)
+    except Exception:
+        pass
+
 @st.cache_data(ttl=120, show_spinner='Refreshing public outage feeds…')
 def load_dashboard():
     """Refresh the collectors and return a consistent dashboard snapshot."""
@@ -335,9 +344,11 @@ def services_view(): category_view('third-party','Online services','Cloud, DNS a
 
 configure_street_manager()
 configure_spen()
+configure_cloudflare()
 
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
 
 navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
 navigation.run()
+
