@@ -25,6 +25,7 @@ feed('azure', 'Microsoft Azure', 'third-party', 'rss', 'https://status.azure.com
 feed('aa', 'Andrews & Arnold', 'broadband', 'rss', 'https://aastatus.net/atom.cgi', 'https://aastatus.net', 'UK provider / location unspecified')
 feed('zen', 'Zen Broadband faults', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-faults-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified')
 feed('zen-maintenance', 'Zen Broadband maintenance', 'broadband', 'rss', 'https://status.zen.co.uk/rss/broadband-maintenance-rss.ashx', 'https://status.zen.co.uk', 'UK provider / location unspecified', 'Planned work notices; check provider for current status.')
+feed('gointernet','Go Internet network status','broadband','gointernet','https://status.gointernet.co.uk/status','https://status.gointernet.co.uk/status','Isle of Wight, Isle of Sheppey and UK wholesale networks','Public status-board incidents for fixed wireless, FTTP and wholesale network context. HTML adapter; individual lines are not diagnosed.')
 feed('npg', 'Northern Powergrid', 'electricity', 'npg', 'https://northernpowergrid.opendatasoft.com/api/explore/v2.1/catalog/datasets/live-power-cuts-data/records', 'https://northernpowergrid.opendatasoft.com/explore/dataset/live-power-cuts-data/', 'North East England, Yorkshire and northern Lincolnshire', 'Source coordinates; power loss can interrupt routers and network equipment.')
 feed('metoffice', 'Met Office weather warnings', 'environment', 'rss', 'https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK', 'https://weather.metoffice.gov.uk/warnings-and-advice', 'UK', 'Risk context, not proof of a broadband outage. Verify warning validity at source.')
 feed('metoffice-historic', 'Met Office historic weather-warning archive', 'environment', 'portal', None, 'https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service', 'UK, March 2011 onwards', 'The supplied NSWWS Metadata 2026 workbook is bundled for History views. It records original issue date, classification, weather element and named regions; it has no validity period or geometry. The live Met Office API has no historic-warning endpoint.')
@@ -100,6 +101,9 @@ PUBLIC_CONNECTORS = {
     'ripe': dict(name='RIPE Atlas UK probe evidence', kind='ripe', url='https://atlas.ripe.net/api/v2/probes/',
         scope='Public UK probes disconnected within the last 24 hours',
         note='RIPE NCC Atlas public probe status. Disconnection may be local power, probe maintenance or connectivity; approximate probe locations are not household fault locations. No active tests are launched.'),
+    'gigaclear': dict(kind='statuspage', url='https://gigaclearltd.statuspage.io/api/v2/incidents.json',
+        scope='Rural England full-fibre network',
+        note='Gigaclear public status-page incidents. Provider notices are useful context but do not diagnose an individual household connection.'),
 }
 for source in SOURCES:
     if source['id'] in PUBLIC_CONNECTORS:

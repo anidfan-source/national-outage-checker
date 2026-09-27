@@ -48,6 +48,9 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('load_historic_flood_warnings(window_start)', source)
         self.assertIn('load_historic_weather_warnings(window_start)', source)
         self.assertIn('Historic flood index is being prepared outside the app', (Path(__file__).resolve().parents[1] / 'historic_flood.py').read_text(encoding='utf-8'))
+        sources=(Path(__file__).resolve().parents[1] / 'sources.py').read_text(encoding='utf-8')
+        self.assertIn('gigaclearltd.statuspage.io', sources)
+        self.assertIn("'gointernet'", sources)
 
 
 if __name__ == '__main__':
