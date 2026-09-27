@@ -51,7 +51,12 @@ class StreamlitAppTests(unittest.TestCase):
         sources=(Path(__file__).resolve().parents[1] / 'sources.py').read_text(encoding='utf-8')
         self.assertIn('gigaclearltd.statuspage.io', sources)
         self.assertIn("'gointernet'", sources)
+        self.assertIn('zzoomm.statuspage.io/api/v2/incidents.json', sources)
+        self.assertIn('wessexinternet.statuspage.io/api/v2/incidents.json', sources)
+        self.assertIn("'quickline'", sources)
+        self.assertIn("'wightfibre'", sources)
 
 
 if __name__ == '__main__':
     unittest.main()
+
