@@ -77,8 +77,10 @@ def flood_area_centroid(item):
                 return None,None
     return lat,lng
 
-def fetch(url):
-    req = urllib.request.Request(url, headers={'User-Agent': 'UK-Outage-Viewer/1.0', 'Accept': 'application/json, application/xml, text/xml, */*'})
+def fetch(url, headers=None):
+    request_headers={'User-Agent': 'UK-Outage-Viewer/1.0', 'Accept': 'application/json, application/xml, text/xml, */*'}
+    request_headers.update(headers or {})
+    req = urllib.request.Request(url, headers=request_headers)
     with urllib.request.urlopen(req, timeout=18) as response:
         raw = response.read(8_000_001)
     if len(raw) > 8_000_000:
@@ -205,7 +207,7 @@ def collect(source):
         return health, None
     health['checkedAt'] = now()
     try:
-        if source['kind'] in ('ssen','spen','nged','ripe','ioda'):
+        if source['kind'] in ('ssen','spen','nged','ripe','ioda','radar'):
             records, details = collect_public(source, fetch, event, date)
             health.update(details)
         elif source['kind'] == 'street-manager-open-data':
@@ -320,3 +322,4 @@ if __name__ == '__main__':
     threading.Thread(target=worker, daemon=True).start()
     print(f'UK Outage Viewer: http://localhost:{port}', flush=True)
     httpd.serve_forever()
+
