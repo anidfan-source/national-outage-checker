@@ -19,11 +19,11 @@ the Streamlit dashboard.
    `npm install && npm run typecheck && npm run deploy`
 8. Verify `https://national-outage-street-manager.anidfan-national-outage.workers.dev/health`.
 
-Use these URLs in DfT Open Data onboarding:
+Use this unified URL in DfT Open Data onboarding:
 
-- `https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/permit`
-- `https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/activity`
-- `https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/section-58`
+- `https://national-outage-street-manager.anidfan-national-outage.workers.dev/street-manager/open-data`
+
+It accepts Permit, Activity and Section 58 notifications and derives the stream only from the verified topic ARN. Topic-specific endpoint aliases are also supported.
 
 Configure Streamlit with the Worker origin and the same read token:
 
