@@ -59,12 +59,14 @@ Add a source in `sources.py` using `feed(...)`. Existing adapters support Status
 
 ## Street Manager Open Data
 
-Street Manager is integrated through the DfT Open Data **Permit** notification feed rather than API-user polling. DfT sends AWS SNS HTTPS POST messages to a separately deployed receiver in `street_manager_webhook.py`. The receiver verifies the SNS signature and the exact production Permit topic ARN before confirming subscriptions or accepting notifications, deduplicates SNS retries, and persists the embedded Permit events.
+Street Manager is integrated through DfT Open Data notifications rather than authenticated V6 API-user polling. DfT sends AWS SNS HTTPS POST messages to a separately deployed receiver in `street_manager_webhook.py`. The receiver supports the Permit, Activity and Section 58 production topics, verifies SNS signatures and exact topic ARNs before confirming subscriptions or accepting notifications, deduplicates SNS retries, and persists the embedded events.
 
-Deploy the included `render.yaml` as a separate web service with a persistent disk. The receiver endpoint to enter in the Street Manager Open Data onboarding form is:
+Deploy the included `render.yaml` as a separate web service with a persistent disk. The receiver endpoints to enter in the Street Manager Open Data onboarding request are:
 
 ```
-https://YOUR-WEBHOOK-HOST/street-manager/permit
+Permit:    https://YOUR-WEBHOOK-HOST/street-manager/permit
+Activity:  https://YOUR-WEBHOOK-HOST/street-manager/activity
+Section58: https://YOUR-WEBHOOK-HOST/street-manager/section-58
 ```
 
 Do not enter the Streamlit application URL. The receiver must be directly reachable by AWS SNS over HTTPS.
@@ -79,7 +81,7 @@ webhook_token = "YOUR_SHARED_READ_TOKEN"
 
 The old Street Manager username/password settings are no longer used by the dashboard. The read token protects the receiver's `/api/events` endpoint and must never be committed to Git.
 
-Once DfT sends the SNS subscription confirmation, the receiver validates the message and automatically calls its HTTPS `SubscribeURL`. Permit notifications are then stored and exposed to the dashboard as roadworks context. They are evidence for correlation only and do not establish that roadworks caused a broadband outage.
+Once DfT sends the SNS subscription confirmation, the receiver validates the message and automatically calls its HTTPS `SubscribeURL`. Permit, activity and Section 58 notifications are then stored and exposed to the dashboard as roadworks context. They are evidence for correlation only and do not establish that roadworks caused a broadband outage.
 
 
 ## Verify
