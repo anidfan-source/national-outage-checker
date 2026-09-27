@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import io
 import json
+from pathlib import Path
 import urllib.request
 import xml.etree.ElementTree as ET
 import zipfile
@@ -11,10 +12,27 @@ from locations import named_place_point
 DATASET_URL = ('https://environment.data.gov.uk/api/file/download?'
                'fileDataSetId=766cb094-b392-4bd6-a02e-f60e143f3213&fileName=Historic_Flood_Warnings.zip')
 ODS_NS = {'table': 'urn:oasis:names:tc:opendocument:xmlns:table:1.0'}
+INDEX_FILE = Path(__file__).resolve().parent / 'data' / 'historic_flood_index.json'
+INDEX_MAX_AGE_DAYS = 90
 
 
-def fetch_historic_flood_warnings(fetch=None):
-    """Return normalized historic EA warnings; the source is refreshed quarterly."""
+def fetch_historic_flood_warnings(since=None, fetch=None):
+    """Query a persistent, date-indexed EA archive instead of reparsing it per view."""
+    records=_load_index(fetch)
+    return [record for record in records if not since or record['date'] >= since]
+
+def _load_index(fetch=None):
+    if INDEX_FILE.exists():
+        try:
+            cached=json.loads(INDEX_FILE.read_text(encoding='utf-8'))
+            age=datetime.now(timezone.utc)-datetime.fromisoformat(cached['indexedAt'])
+            if age.days < INDEX_MAX_AGE_DAYS and isinstance(cached.get('records'),list): return cached['records']
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+            pass
+    return _build_index(fetch)
+
+def _build_index(fetch=None):
+    """Download and normalize the quarterly release once, then retain a compact local index."""
     fetch = fetch or _fetch
     with zipfile.ZipFile(io.BytesIO(fetch(DATASET_URL))) as release:
         name = next(item for item in release.namelist() if item.lower().endswith('.ods'))
@@ -43,6 +61,10 @@ def fetch_historic_flood_warnings(fetch=None):
             'telephoneAreas': [], 'locationPoints': [point] if point else [], 'evidenceType': 'historic-environment-context',
             'attribution': 'Environment Agency historic flood warnings, Open Government Licence v3.0',
         })
+    INDEX_FILE.parent.mkdir(parents=True,exist_ok=True)
+    temporary=INDEX_FILE.with_suffix('.tmp')
+    temporary.write_text(json.dumps({'indexedAt':datetime.now(timezone.utc).isoformat(),'records':result},separators=(',',':')),encoding='utf-8')
+    temporary.replace(INDEX_FILE)
     return result
 
 

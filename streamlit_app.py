@@ -67,12 +67,12 @@ def load_dashboard():
     return server.snapshot()
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_historic_flood_warnings():
-    return fetch_historic_flood_warnings()
+def load_historic_flood_warnings(since):
+    return fetch_historic_flood_warnings(since=since)
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def load_historic_weather_warnings():
-    return fetch_historic_weather_warnings()
+def load_historic_weather_warnings(since):
+    return fetch_historic_weather_warnings(since=since)
 
 def text(value): return str(value or '').casefold()
 
@@ -170,7 +170,8 @@ def filters(data, page_categories=None):
     incident_data=data
     if mode=='History' and 'environment' in categories:
         try:
-            incident_data={**data,'incidents':data['incidents']+load_historic_flood_warnings()+load_historic_weather_warnings()}
+            window_start=since.isoformat()
+            incident_data={**data,'incidents':data['incidents']+load_historic_flood_warnings(window_start)+load_historic_weather_warnings(window_start)}
         except Exception as error:
             st.sidebar.warning(f'Historic environmental archive unavailable: {type(error).__name__}')
     records=filtered_incidents(incident_data,categories,provider,location,query,mode,since)
