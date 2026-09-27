@@ -81,3 +81,18 @@ def reference_summary():
     return dict(generatedAt=REFERENCE['generatedAt'], codeCount=len(CODES),
                 mappedCount=sum(bool(x['postcodeAreas']) for x in CODES.values()),
                 codes=[dict(code=x['code'],place=x['place'],postcodeAreas=x['postcodeAreas']) for x in CODES.values()])
+
+def named_place_point(*values):
+    """Return a conservative point only when an explicit reference place appears in text."""
+    evidence=' '.join(str(value or '') for value in values).casefold()
+    candidates=[]
+    for item in CODES.values():
+        place=str(item.get('place') or '')
+        if len(place) < 4 or item.get('lat') is None or item.get('lng') is None:
+            continue
+        if re.search(r'(?<![a-z])'+re.escape(place.casefold())+r'(?![a-z])', evidence):
+            candidates.append(item)
+    if not candidates:
+        return None
+    best=max(candidates,key=lambda item:len(item['place']))
+    return dict(lat=best['lat'],lng=best['lng'],method='named-place',label=f"Approximate named place: {best['place']}")
