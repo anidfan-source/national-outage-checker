@@ -43,6 +43,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('def area_label', source)
         self.assertIn('areaLabel', source)
         self.assertIn('time_after_first_fetch', source)
+        self.assertIn('provider_time_after_fetch', source)
+        self.assertIn('chronology is inconsistent', source)
         self.assertIn("ZoneInfo('Europe/London')", source)
         self.assertIn('def display_time', source)
         self.assertIn('Identified:', source)
