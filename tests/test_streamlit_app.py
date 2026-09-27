@@ -55,6 +55,9 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('wessexinternet.statuspage.io/api/v2/incidents.json', sources)
         self.assertIn("'quickline'", sources)
         self.assertIn("'wightfibre'", sources)
+        self.assertIn('status.meraki.net', sources)
+        self.assertIn('status.ui.com', sources)
+        self.assertIn('status.netgear.com/rss', sources)
 
 
 if __name__ == '__main__':
