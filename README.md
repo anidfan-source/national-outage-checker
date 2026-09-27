@@ -28,7 +28,7 @@ The registry in `sources.py` contains 59 sources:
 
 Portal-only entries are explicitly **not connected**. Their notes explain the next access or adapter requirement. Some links lead to provider help/home pages rather than a public feed. Availability is checked for automatic feeds on every collection; HTTP errors, timeouts and invalid responses appear in the source directory. There is no claim of exhaustive coverage: new providers appear, private line faults require customer information and many services have no public outage API.
 
-At initial verification, 17 of 19 feeds responded successfully; Fastly returned HTTP 403 and the Environment Agency HTTP 503. This is a test snapshot, not an availability guarantee.
+An earlier verification snapshot covered 19 of the then-configured automatic feeds: 17 responded successfully, while Fastly returned HTTP 403 and the Environment Agency returned HTTP 503. The registry has since expanded to the count above. Treat this as historical test information, not a current availability guarantee.
 
 ## How data is handled
 
@@ -56,6 +56,15 @@ At initial verification, 17 of 19 feeds responded successfully; Fastly returned 
 ## Extend
 
 Add a source in `sources.py` using `feed(...)`. Existing adapters support Statuspage JSON, Google Cloud JSON, RSS/Atom, Northern Powergrid and Environment Agency flood data. For another schema add a validated adapter in `server.parse`, with fixture tests. Provider links alone must use `kind='portal'`. Do not add invented endpoints or label a portal as a live connection. Tokens should be held server-side; authentication is not implemented for portal entries.
+
+## Deployment
+
+The application has two independently deployable components:
+
+- **Main dashboard:** deploy `streamlit_app.py` on a Streamlit-compatible host. It needs persistent storage if outage history in `data/outages.sqlite3` must survive restarts.
+- **Street Manager receiver:** deploy `street_manager_webhook.py` separately using the included `render.yaml`. This service needs a public HTTPS endpoint and persistent storage for its SQLite database.
+
+The supplied Render blueprint configures only the Street Manager receiver; it does not deploy the main dashboard. The legacy `server.py` interface binds to localhost by default and needs a production server or reverse proxy, TLS, persistence and monitoring before internet exposure.
 
 ## Street Manager Open Data
 
@@ -88,7 +97,7 @@ Once DfT sends the SNS subscription confirmation, the receiver validates the mes
 python3 -m unittest -v
 ```
 
-Tests cover parsing, dates, unresolved incident collection, stale retention, archive deduplication, future power work, schema rejection and unsafe source URLs. Live network health is visible at `/api/dashboard`; the API has no caller-supplied upstream URL and static serving is restricted to the four frontend files.
+GitHub Actions runs this command against the supported Python matrix on pushes and pull requests. Tests cover parsing, dates, unresolved incident collection, stale retention, archive deduplication, future power work, schema rejection and unsafe source URLs. Live network health is visible at `/api/dashboard`; the API has no caller-supplied upstream URL and static serving is restricted to the four frontend files.
 
 ## Telephone area codes and postcode areas
 
