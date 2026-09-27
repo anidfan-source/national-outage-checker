@@ -1,6 +1,7 @@
 """On-demand importer for the Environment Agency Historic Flood Warnings release."""
 from datetime import datetime, timezone
 import io
+import gzip
 import json
 from pathlib import Path
 import urllib.request
@@ -12,7 +13,7 @@ from locations import named_place_point
 DATASET_URL = ('https://environment.data.gov.uk/api/file/download?'
                'fileDataSetId=766cb094-b392-4bd6-a02e-f60e143f3213&fileName=Historic_Flood_Warnings.zip')
 ODS_NS = {'table': 'urn:oasis:names:tc:opendocument:xmlns:table:1.0'}
-INDEX_FILE = Path(__file__).resolve().parent / 'data' / 'historic_flood_index.json'
+INDEX_FILE = Path(__file__).resolve().parent / 'reference' / 'historic_flood_index.json.gz'
 INDEX_MAX_AGE_DAYS = 90
 
 
@@ -24,12 +25,12 @@ def fetch_historic_flood_warnings(since=None, fetch=None):
 def _load_index(fetch=None):
     if INDEX_FILE.exists():
         try:
-            cached=json.loads(INDEX_FILE.read_text(encoding='utf-8'))
+            with gzip.open(INDEX_FILE,'rt',encoding='utf-8') as handle: cached=json.load(handle)
             age=datetime.now(timezone.utc)-datetime.fromisoformat(cached['indexedAt'])
             if age.days < INDEX_MAX_AGE_DAYS and isinstance(cached.get('records'),list): return cached['records']
         except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
             pass
-    return _build_index(fetch)
+    raise RuntimeError('Historic flood index is being prepared outside the app. Met Office history remains available.')
 
 def _build_index(fetch=None):
     """Download and normalize the quarterly release once, then retain a compact local index."""
@@ -63,7 +64,7 @@ def _build_index(fetch=None):
         })
     INDEX_FILE.parent.mkdir(parents=True,exist_ok=True)
     temporary=INDEX_FILE.with_suffix('.tmp')
-    temporary.write_text(json.dumps({'indexedAt':datetime.now(timezone.utc).isoformat(),'records':result},separators=(',',':')),encoding='utf-8')
+    with gzip.open(temporary,'wt',encoding='utf-8') as handle: json.dump({'indexedAt':datetime.now(timezone.utc).isoformat(),'records':result},handle,separators=(',',':'))
     temporary.replace(INDEX_FILE)
     return result
 
