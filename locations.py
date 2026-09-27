@@ -2,6 +2,9 @@
 import json
 from pathlib import Path
 import re
+import math
+import urllib.parse
+import urllib.request
 
 REFERENCE = json.loads((Path(__file__).resolve().parent/'reference'/'uk_locations.json').read_text())
 CODES = REFERENCE['codes']
@@ -11,6 +14,31 @@ CODE = re.compile(r'(?<![\w+])(?:0[12]\d{1,5}|(?:\+44|0044)[ \t]*(?:\(0\)[ \t]*)
 POSTCODE = re.compile(r'(?<![A-Z0-9])([A-Z]{1,2}\d[A-Z\d]?)(?:\s*(\d[A-Z]{2}))?(?![A-Z0-9])', re.I)
 CONTEXT = re.compile(r'\b(area\s*codes?|dial(?:l?ing)?\s*codes?|STD|prefix(?:es)?|exchanges?|affected|outage|fault|incident|disruption)\b', re.I)
 CONTACT = re.compile(r'\b(call|contact|helpline|helpdesk|support\s*(?:on|number|line)|fax)\b', re.I)
+FULL_POSTCODE = re.compile(r'^([A-Z]{1,2}\d[A-Z\d]?)\s*(\d[A-Z]{2})$', re.I)
+
+def lookup_postcode(value):
+    """Resolve one full UK postcode to its ONS geography via the open Postcodes.io API."""
+    compact=re.sub(r'\s+','',str(value or '')).upper()
+    match=FULL_POSTCODE.fullmatch(compact)
+    if not match:
+        return None
+    url='https://api.postcodes.io/postcodes/'+urllib.parse.quote(compact,safe='')
+    request=urllib.request.Request(url,headers={'User-Agent':'UK-Outage-Viewer/1.0','Accept':'application/json'})
+    with urllib.request.urlopen(request,timeout=8) as response:
+        payload=json.loads(response.read(1_000_001))
+    result=payload.get('result')
+    if payload.get('status') != 200 or not isinstance(result,dict):
+        return None
+    return {key:result.get(key) for key in ('postcode','outcode','latitude','longitude','admin_district','admin_county','admin_ward','parish','region','country')}
+
+def distance_km(lat1,lng1,lat2,lng2):
+    """Great-circle distance used only to match already-published approximate points."""
+    try:
+        a,b,c,d=map(math.radians,map(float,(lat1,lng1,lat2,lng2)))
+    except (TypeError,ValueError):
+        return None
+    value=math.sin((c-a)/2)**2+math.cos(a)*math.cos(c)*math.sin((d-b)/2)**2
+    return 6371*2*math.asin(min(1,math.sqrt(value)))
 
 def normal_code(value):
     value = re.sub(r'[\s()-]', '', value)
@@ -96,3 +124,4 @@ def named_place_point(*values):
         return None
     best=max(candidates,key=lambda item:len(item['place']))
     return dict(lat=best['lat'],lng=best['lng'],method='named-place',label=f"Approximate named place: {best['place']}")
+
