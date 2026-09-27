@@ -27,6 +27,10 @@ DB = ROOT / 'data' / 'outages.sqlite3'
 INTERVAL = 300
 LOCK = threading.Lock()
 STATE = {'sources': [], 'updatedAt': None, 'refreshing': True}
+SCOTTISH_WARNING_REGIONS = (
+    'Orkney & Shetland', 'Highlands & Eilean Siar', 'Grampian', 'Strathclyde',
+    'Central, Tayside & Fife', 'SW Scotland, Lothian Borders',
+)
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -45,6 +49,12 @@ def date(value):
 
 def plain(value):
     return html.unescape(re.sub('<[^>]+>', ' ', str(value or ''))).strip()[:6000]
+
+def weather_warning_region(title, description, fallback):
+    """Keep Met Office Scottish warning areas visible without duplicating its UK feed."""
+    evidence = f'{title}\n{description}'.casefold()
+    matches = [region for region in SCOTTISH_WARNING_REGIONS if region.casefold() in evidence]
+    return 'Scotland — ' + '; '.join(matches) if matches else fallback
 
 def safe_url(value, fallback):
     return value if value and urllib.parse.urlsplit(value).scheme in ('https', 'http') else fallback
@@ -97,9 +107,11 @@ def parse(source, raw):
             title = field(item, 'title')
             url = field(item, 'link')
             key = field(item, 'guid', 'id') or url or hashlib.sha256(title.encode()).hexdigest()
+            description = field(item, 'description', 'summary', 'content')
+            region = weather_warning_region(title, description, source['scope']) if source['id'] == 'metoffice' else source['scope']
             # Generic news feeds do not reliably encode active/resolved state.
             result.append(event(source, key, title, field(item, 'pubDate', 'published', 'updated', 'date'),
-                                'notice', field(item, 'description', 'summary', 'content'), url))
+                                'notice', description, url, region=region))
         return result
     data = json.loads(raw)
     if kind == 'statuspage':

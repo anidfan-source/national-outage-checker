@@ -28,6 +28,12 @@ class ConnectorTests(unittest.TestCase):
         self.assertEqual(rows[0]['status'],'notice')
         self.assertIsNone(rows[0]['date'])
 
+    def test_met_office_warning_keeps_scottish_region(self):
+        source = {**self.source, 'id':'metoffice', 'kind':'rss'}
+        xml = '<rss><channel><item><guid>x</guid><title>Yellow warning for Strathclyde</title><description>Heavy rain</description></item></channel></rss>'
+        rows = server.parse(source, xml)
+        self.assertEqual(rows[0]['region'], 'Scotland — Strathclyde')
+
     def test_atom(self):
         rows = server.parse({**self.source,'kind':'rss'}, '<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>42</id><title>Notice</title><updated>2026-09-01T00:00:00Z</updated><link href="https://example.com/42"/><summary>Details</summary></entry></feed>')
         self.assertEqual(rows[0]['id'],'test:42')
