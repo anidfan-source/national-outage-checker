@@ -12,7 +12,7 @@ import server
 from historic_flood import fetch_historic_flood_warnings
 from historic_weather import fetch_historic_weather_warnings
 from locations import distance_km, lookup_postcode
-from reporting import LIMITATIONS, csv_bytes, report
+from reporting import LIMITATIONS, csv_bytes, report, source_health_csv_bytes
 
 st.set_page_config(page_title='UK Outage Viewer', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
 st.markdown('''<style>
@@ -247,9 +247,10 @@ def header(data, eyebrow, title, description):
     st.caption(f"Updated {display_time(data.get('updatedAt'))} · {fresh} live feeds connected · {stale} stale source{'s' if stale!=1 else ''}")
 
 def exports(records, data, summary):
-    payload=report(records,data['sources'],summary,data.get('updatedAt')); a,b=st.columns(2)
-    a.download_button('Export filtered CSV',csv_bytes(payload),filename('csv'),'text/csv',use_container_width=True)
-    b.download_button('Export filtered JSON',json.dumps(payload,ensure_ascii=False,indent=2),filename('json'),'application/json',use_container_width=True)
+    payload=report(records,data['sources'],summary,data.get('updatedAt')); a,b,c=st.columns(3)
+    a.download_button('Incidents CSV',csv_bytes(payload),filename('csv'),'text/csv',use_container_width=True)
+    b.download_button('Source health CSV',source_health_csv_bytes(payload),filename('sources.csv'),'text/csv',use_container_width=True)
+    c.download_button('Complete JSON',json.dumps(payload,ensure_ascii=False,indent=2),filename('json'),'application/json',use_container_width=True)
 
 def lock_map_selection(event, key):
     """Persist a selected map point as the next-run location filter."""
