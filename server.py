@@ -176,7 +176,7 @@ def collect(source):
         return health, None
     health['checkedAt'] = now()
     try:
-        if source['kind'] in ('ssen','nged','ripe','ioda'):
+        if source['kind'] in ('ssen','spen','nged','ripe','ioda'):
             records, details = collect_public(source, fetch, event, date)
             health.update(details)
         elif source['kind'] == 'street-manager-open-data':

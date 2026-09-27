@@ -31,6 +31,16 @@ class PublicConnectorTests(unittest.TestCase):
         self.assertEqual(rows[0]['date'],'2020-07-01T09:00:00+00:00')
         self.assertEqual(rows[0]['sourceStartRaw'],'2020-07-01T10:00:00')
 
+    def test_spen_normalizes_live_outages(self):
+        payload={'results':[{'fault_id':'sp-1','planned':False,'status':'Ongoing','date_of_reported_fault':'2026-09-27T12:00:00Z',
+            'etr':'2026-09-27T15:00:00Z','upload_date':'2026-09-27T12:05:00Z','voltage':'LV','post_code':'G1',
+            'local_authority':'Glasgow City','region':'Central Belt','location_latitude':55.86,'location_longitude':-4.25}]}
+        rows=self.normalize('spen',payload)
+        self.assertEqual(rows[0]['status'],'reported')
+        self.assertEqual(rows[0]['region'],'G1 · Glasgow City · Central Belt')
+        self.assertEqual(rows[0]['estimatedRestorationAt'],'2026-09-27T15:00:00+00:00')
+        self.assertEqual(rows[0]['lat'],55.86)
+
     def test_nged_planned_future_and_missing_date(self):
         rows=self.normalize('nged',{'success':True,'result':{'records':[{'Incident ID':'a','Planned':'true','Start Time':'2099-01-01T10:00:00'},{'Incident ID':'b'}]}})
         self.assertEqual(rows[0]['status'],'scheduled')

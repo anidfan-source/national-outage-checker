@@ -2,6 +2,7 @@
 from datetime import datetime, timezone, timedelta
 import hashlib
 import json
+import os
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -79,11 +80,19 @@ def get_pages(source, fetch):
 
 
 def collect_public(source, fetch, make_event, parse_date):
-    data = json.loads(fetch(source['url'])) if source['kind'] == 'ssen' else get_pages(source, fetch)
+    if source['kind'] == 'spen':
+        api_key = os.getenv('SPEN_API_KEY')
+        if not api_key:
+            raise RuntimeError('SPEN_API_KEY is not configured')
+        data = json.loads(fetch(source['url'] + '?' + urlencode({'apikey': api_key, 'limit': PAGE_SIZE})))
+    else:
+        data = json.loads(fetch(source['url'])) if source['kind'] == 'ssen' else get_pages(source, fetch)
     records = normalize(source, data, make_event, parse_date)
     details = {}
     if source['kind'] == 'ssen':
         details['sourceUpdatedAt'] = parse_date(data.get('timestampUtc'))
+    elif source['kind'] == 'spen':
+        details['sourceUpdatedAt'] = max((x['sourceUpdatedAt'] for x in records if x.get('sourceUpdatedAt')), default=None)
     elif source['kind'] == 'nged':
         details['sourceUpdatedAt'] = max((x['sourceUpdatedAt'] for x in records if x.get('sourceUpdatedAt')), default=None)
     elif source['kind'] == 'ripe':
@@ -118,6 +127,26 @@ def normalize(source, data, make_event, parse_date):
                         sourceSubtype=x.get('jobSubType'), customersAffected=x.get('customerCount'),
                         estimatedRestorationAt=parse_date(x.get('estimatedRestorationTimeUtc')), evidenceType='provider-report',
                         attribution='SSEN Distribution, CC BY 4.0')
+            result.append(item)
+    elif kind == 'spen':
+        if not isinstance(data.get('results'), list):
+            raise ValueError('Invalid SPEN outage snapshot')
+        for x in data['results']:
+            if not x.get('fault_id'):
+                raise ValueError('SPEN outage has no fault ID')
+            started = parse_date(x.get('planned_outage_start_date') if x.get('planned') else x.get('date_of_reported_fault'))
+            state = str(x.get('status') or '').casefold()
+            status = 'resolved' if state in ('resolved', 'restored', 'completed', 'closed') else 'reported'
+            if status != 'resolved' and x.get('planned') and started and datetime.fromisoformat(started) > current:
+                status = 'scheduled'
+            location = ' · '.join(str(value) for value in (x.get('post_code'), x.get('local_authority'), x.get('region')) if value) or source['scope']
+            item = make_event(source, x['fault_id'], ('Planned power work' if x.get('planned') else 'Power cut') + ': ' + str(x.get('voltage') or 'Network incident'),
+                started, status, 'Provider status: ' + str(x.get('status') or 'unknown'), source['website'],
+                x.get('location_latitude'), x.get('location_longitude'), location)
+            item.update(sourceUpdatedAt=parse_date(x.get('upload_date')), sourceStatus=x.get('status'),
+                customersAffected=None, estimatedRestorationAt=parse_date(x.get('etr')), planned=bool(x.get('planned')),
+                evidenceType='provider-report', attribution='SP Energy Networks National Energy Outage Data, CC BY 4.0',
+                localAuthority=x.get('local_authority'), licenceArea=x.get('licence_area'))
             result.append(item)
     elif kind == 'nged':
         if data.get('success') is not True or not isinstance(data.get('result',{}).get('records'), list):
