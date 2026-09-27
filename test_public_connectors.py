@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 import json
 import unittest
 from unittest.mock import patch
-from public_connectors import normalize, get_pages, provider_date
+from public_connectors import normalize, get_pages, get_spen_pages, provider_date
 from server import event, date, collect
 from sources import SOURCES
 from locations import enrich
@@ -40,6 +40,13 @@ class PublicConnectorTests(unittest.TestCase):
         self.assertEqual(rows[0]['region'],'G1 · Glasgow City · Central Belt')
         self.assertEqual(rows[0]['estimatedRestorationAt'],'2026-09-27T15:00:00+00:00')
         self.assertEqual(rows[0]['lat'],55.86)
+
+    def test_spen_paginates_with_its_100_record_limit(self):
+        source=self.source('spen')
+        pages=[{'total_count':101,'results':[{'fault_id':'a'}]*100},{'total_count':101,'results':[{'fault_id':'b'}]}]
+        with patch.dict('os.environ',{'SPEN_API_KEY':'test-key'}),patch('public_connectors.SPEN_PAGE_SIZE',100):
+            data=get_spen_pages(source,lambda _:json.dumps(pages.pop(0)))
+        self.assertEqual(len(data['results']),101)
 
     def test_nged_planned_future_and_missing_date(self):
         rows=self.normalize('nged',{'success':True,'result':{'records':[{'Incident ID':'a','Planned':'true','Start Time':'2099-01-01T10:00:00'},{'Incident ID':'b'}]}})

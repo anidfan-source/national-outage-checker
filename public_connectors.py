@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 MAX_PAGES = 20
 PAGE_SIZE = 500
+SPEN_PAGE_SIZE = 100
 
 
 def epoch(value):
@@ -79,12 +80,35 @@ def get_pages(source, fetch):
     raise ValueError('Pagination limit reached; refusing partial snapshot')
 
 
+def get_spen_pages(source, fetch):
+    """SPEN's Opendatasoft endpoint caps each authenticated page at 100 rows."""
+    api_key = os.getenv('SPEN_API_KEY')
+    if not api_key:
+        raise RuntimeError('SPEN_API_KEY is not configured')
+    rows = []
+    total = None
+    for page in range(MAX_PAGES):
+        url = source['url'] + '?' + urlencode({'apikey': api_key, 'limit': SPEN_PAGE_SIZE, 'offset': page * SPEN_PAGE_SIZE})
+        data = json.loads(fetch(url))
+        batch = data.get('results')
+        count = data.get('total_count')
+        if not isinstance(batch, list) or not isinstance(count, int):
+            raise ValueError('SPEN API returned an invalid outage snapshot')
+        if total is None:
+            total = count
+        elif count != total:
+            raise ValueError('SPEN outage total changed during pagination')
+        rows.extend(batch)
+        if len(rows) >= total:
+            return {'results': rows[:total]}
+        if not batch:
+            raise ValueError('Empty SPEN page before end of feed')
+    raise ValueError('SPEN pagination limit reached; refusing partial snapshot')
+
+
 def collect_public(source, fetch, make_event, parse_date):
     if source['kind'] == 'spen':
-        api_key = os.getenv('SPEN_API_KEY')
-        if not api_key:
-            raise RuntimeError('SPEN_API_KEY is not configured')
-        data = json.loads(fetch(source['url'] + '?' + urlencode({'apikey': api_key, 'limit': PAGE_SIZE})))
+        data = get_spen_pages(source, fetch)
     else:
         data = json.loads(fetch(source['url'])) if source['kind'] == 'ssen' else get_pages(source, fetch)
     records = normalize(source, data, make_event, parse_date)
