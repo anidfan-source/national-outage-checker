@@ -131,13 +131,15 @@ def filename(extension): return 'uk-outage-report-'+datetime.now(timezone.utc).s
 
 def filters(data, page_categories=None):
     names={source['id']:source['name'] for source in data['sources']}
+    if st.session_state.get('map_area_pending'):
+        st.session_state['location_query']=st.session_state.pop('map_area_pending')
     _,view_control,_=st.columns((1,2,1))
     with view_control:
         st.caption('SHOW INCIDENTS')
         mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
     with st.sidebar:
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
-        location_query=st.text_input('Location',placeholder='LS1 1AA, Scotland or Aberdeenshire',help='Search by postcode, UK country, county or local authority. Country/county matches use source-supplied location text.')
+        location_query=st.text_input('Location',placeholder='LS1 1AA, Glasgow, Scotland or Aberdeenshire',help='Search by postcode, city, town, UK country, county or local authority. Click a mapped point to lock this filter to its reported area.',key='location_query')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
         query=st.text_input('Find a provider or issue',placeholder='Power cut, Zen, rain…')
@@ -168,8 +170,17 @@ def exports(records, data, summary):
     a.download_button('Export filtered CSV',csv_bytes(payload),filename('csv'),'text/csv',use_container_width=True)
     b.download_button('Export filtered JSON',json.dumps(payload,ensure_ascii=False,indent=2),filename('json'),'application/json',use_container_width=True)
 
+def lock_map_selection(event, key):
+    """Persist a selected map point as the next-run location filter."""
+    objects=(event.selection or {}).get('objects',{}) if event else {}
+    selected=next((item for layer in objects.values() for item in layer if item.get('area')),None)
+    if selected and st.session_state.get('map_selection_applied') != (key,selected['area']):
+        st.session_state['map_selection_applied']=(key,selected['area'])
+        st.session_state['map_area_pending']=selected['area']
+        st.rerun()
+
 def map_records(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),
+    points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],
              'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
             for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     if points:
@@ -180,10 +191,10 @@ def map_records(records):
             views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
             layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=9000,radius_min_pixels=5,radius_max_pixels=14,
                               get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True)],
-            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{category}<br/>{type}'},
+            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{category}<br/>{type}<br/><i>Click to lock to {area}</i>'},
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
-        st.pydeck_chart(chart,width='stretch')
+        lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='outage_map'), 'outage_map')
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
 def impact_weight(item):
@@ -191,10 +202,10 @@ def impact_weight(item):
     except (TypeError, ValueError): return 1
 
 def impact_heatmap(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item)} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'title':item.get('title'),'provider':item.get('provider')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     if not points: st.info('No mapped locations match these filters.'); return
-    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]])],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
-    st.pydeck_chart(chart,width='stretch')
+    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],tooltip={'html':'<b>{provider}</b><br/>{title}<br/><i>Click to lock to {area}</i>'},map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='impact_heatmap'), 'impact_heatmap')
 
 def incident_list(records, title='Published evidence'):
     st.subheader(f'{title} ({len(records)})')
