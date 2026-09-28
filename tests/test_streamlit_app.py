@@ -44,6 +44,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('Roadworks detail', source)
         self.assertIn("point.get('promoter')", source)
         self.assertNotIn("on_select='rerun'", source)
+        self.assertIn("key='location_query_input'", source)
+        self.assertIn("key='location_search'", source)
         self.assertIn('map_area_pending', source)
         self.assertIn('def area_label', source)
         self.assertIn('areaLabel', source)
