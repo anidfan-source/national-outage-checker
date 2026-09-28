@@ -1,6 +1,31 @@
 """Street Manager v7 polling connector."""
 from datetime import datetime, timedelta, timezone
-import json, os, urllib.error, urllib.parse, urllib.request
+import json, os, re, urllib.error, urllib.parse, urllib.request
+
+TELECOM_TERMS=(
+    'telecom','telecommunications','broadband','fibre','fiber','internet','network','cable',
+    'openreach','bt','virgin media','virginmedia','cityfibre','city fibre','vodafone','voneus',
+    'hyperoptic','gigaclear','community fibre','communityfibre','zzoomm','giganet','toob',
+    'talktalk','sky','o2','telefonica','three','ee','mobile','isp'
+)
+CANCELLED_TERMS=('cancelled','canceled','permit_cancelled','permit_canceled')
+ACTIVE_TERMS=('in progress','in_progress','in-progress','started','active','works started','work started')
+
+def _normalise(value):
+    return re.sub(r'[^a-z0-9]+',' ',str(value or '').casefold()).strip()
+
+def _is_telecom_record(*values):
+    haystack=' '.join(_normalise(value) for value in values if value)
+    return any(term in haystack for term in TELECOM_TERMS)
+
+def _is_cancelled(status):
+    normal=_normalise(status)
+    return any(_normalise(term) in normal for term in CANCELLED_TERMS)
+
+def _display_status(status):
+    normal=_normalise(status)
+    if any(_normalise(term) in normal for term in ACTIVE_TERMS): return 'in progress'
+    return status
 MAX_PAGES=20
 PAGE_SIZE=250
 
@@ -68,7 +93,11 @@ def collect_street_manager(source,make_event,parse_date):
         street=_value(row,'street_name','streetName','street_descriptor','streetDescriptor')
         status=_value(row,'work_status','workStatus','status') or 'roadworks-update'
         category=_value(row,'work_category','workCategory'); traffic=_value(row,'traffic_management_type','trafficManagementType')
-        title='Street works update'+(f' · {promoter}' if promoter else '')
+        description=_value(row,'work_description','workDescription','description','activity_type','activityType')
+        if _is_cancelled(status): continue
+        if not _is_telecom_record(promoter,category,description): continue
+        status=_display_status(status)
+        title='Telecom street works update'+(f' · {promoter}' if promoter else '')
         bits=[x for x in [f'Location: {street}' if street else None,f'Category: {category}' if category else None,f'Traffic management: {traffic}' if traffic else None] if x]
         desc='Street Manager v7 work update.'+(' '+'. '.join(bits)+'.' if bits else '')
         item=make_event(source,f'{wrn}:{update_id or when or "update"}',title,when,status,desc,source['website'],region=street or source['scope'])
