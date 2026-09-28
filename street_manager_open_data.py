@@ -65,6 +65,10 @@ def collect_street_manager_open_data(source,make_event,parse_date):
         category=_value(data,"work_category")
         traffic=_value(data,"traffic_management_type")
         status=_display_status(data,event_type)
+        proposed_start=_value(data,"proposed_start_time","proposed_start_date","start_time","start_date")
+        proposed_end=_value(data,"proposed_end_time","proposed_end_date","end_time","end_date")
+        actual_start=_value(data,"actual_start_date_time")
+        actual_end=_value(data,"actual_end_date_time")
         title="Telecom street works · "+str(event_type or "update").replace("_"," ").title()
         if promoter: title += " · "+str(promoter)
         bits=[x for x in [
@@ -80,6 +84,9 @@ def collect_street_manager_open_data(source,make_event,parse_date):
                     permitReferenceNumber=data.get("permit_reference_number"),
                     promoter=promoter,workCategory=category,trafficManagementType=traffic,
                     usrn=data.get("usrn"),eventType=event_type,
+                    raisedAt=row.get("event_time"),
+                    proposedStartAt=proposed_start,proposedEndAt=proposed_end,
+                    actualStartAt=actual_start,actualEndAt=actual_end,
                     attribution="Department for Transport Street Manager Open Data")
         records.append(item)
     return list({r["id"]:r for r in records}.values()),{
