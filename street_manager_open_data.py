@@ -1,5 +1,36 @@
 """Collector for the separately deployed Street Manager Open Data receiver."""
-import json, os, urllib.request
+import json, os, re, urllib.request
+
+TELECOM_TERMS=(
+    'telecom','telecommunications','broadband','fibre','fiber','internet','network','cable',
+    'openreach','bt','virgin media','virginmedia','cityfibre','city fibre','vodafone','voneus',
+    'hyperoptic','gigaclear','community fibre','communityfibre','zzoomm','giganet','toob',
+    'talktalk','sky','o2','telefonica','three','ee','mobile','isp'
+)
+CANCELLED_TERMS=('cancelled','canceled','permit_cancelled','permit_canceled')
+ACTIVE_TERMS=('in progress','in_progress','in-progress','started','active','works started','work started')
+
+def _normalise(value):
+    return re.sub(r'[^a-z0-9]+',' ',str(value or '').casefold()).strip()
+
+def _is_telecom_record(data):
+    fields=[
+        _value(data,'promoter_organisation','promoter_organisation_name','promoter_name'),
+        _value(data,'work_description','description','activity_type','work_type','work_category'),
+    ]
+    haystack=' '.join(_normalise(value) for value in fields if value)
+    return any(term in haystack for term in TELECOM_TERMS)
+
+def _is_cancelled(data,event_type):
+    values=[_value(data,'work_status','permit_status','status','permit_event'),event_type]
+    haystack=' '.join(_normalise(value) for value in values if value)
+    return any(_normalise(term) in haystack for term in CANCELLED_TERMS)
+
+def _display_status(data,event_type):
+    raw=_value(data,'work_status','permit_status','status') or event_type or 'roadworks-update'
+    normal=_normalise(raw)
+    if any(_normalise(term) in normal for term in ACTIVE_TERMS): return 'in progress'
+    return raw
 
 def _value(row,*names):
     for name in names:
@@ -25,13 +56,16 @@ def collect_street_manager_open_data(source,make_event,parse_date):
         data=row.get("object_data") or {}
         wrn=_value(data,"work_reference_number") or row.get("object_reference")
         if not wrn: continue
+        event_type=row.get("event_type")
+        if _is_cancelled(data,event_type): continue
+        if not _is_telecom_record(data): continue
         event_ref=row.get("event_reference") or row.get("object_reference") or row.get("event_time")
         promoter=_value(data,"promoter_organisation","promoter_organisation_name")
         street=_value(data,"street_name","area_name","town")
         category=_value(data,"work_category")
         traffic=_value(data,"traffic_management_type")
-        status=_value(data,"work_status") or row.get("event_type") or "roadworks-update"
-        title="Street works · "+str(row.get("event_type") or "update").replace("_"," ").title()
+        status=_display_status(data,event_type)
+        title="Telecom street works · "+str(event_type or "update").replace("_"," ").title()
         if promoter: title += " · "+str(promoter)
         bits=[x for x in [
             f"Street: {street}" if street else None,
@@ -45,7 +79,7 @@ def collect_street_manager_open_data(source,make_event,parse_date):
         item.update(evidenceType="roadworks-context",workReferenceNumber=wrn,
                     permitReferenceNumber=data.get("permit_reference_number"),
                     promoter=promoter,workCategory=category,trafficManagementType=traffic,
-                    usrn=data.get("usrn"),eventType=row.get("event_type"),
+                    usrn=data.get("usrn"),eventType=event_type,
                     attribution="Department for Transport Street Manager Open Data")
         records.append(item)
     return list({r["id"]:r for r in records}.values()),{
