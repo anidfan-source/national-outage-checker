@@ -1,0 +1,83 @@
+"""Roadworks collectors for Scotland (SRWR) and Wales (Traffic Wales)."""
+import csv, hashlib, html, io, re, urllib.parse, urllib.request, xml.etree.ElementTree as ET, zipfile
+
+TELECOM_TERMS=(
+    "telecom","broadband","fibre","fiber","openreach","bt","virgin media","cityfibre",
+    "vodafone","hyperoptic","gigaclear","community fibre","talktalk","telefonica","o2",
+)
+SRWR_PAGE="https://downloads.srwr.scot/disruptions-export"
+
+def _clean(value):
+    return re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",str(value or "")))).strip()
+
+def _norm(value):
+    return re.sub(r"[^a-z0-9]+"," ",str(value or "").casefold()).strip()
+
+def _pick(row,*names):
+    norm={_norm(k).replace(" ","_"):v for k,v in row.items()}
+    for name in names:
+        value=norm.get(_norm(name).replace(" ","_"))
+        if value not in (None,""): return value
+    return None
+
+def _telecom(row):
+    text=_norm(" ".join(str(v or "") for v in row.values()))
+    return any(term in text for term in TELECOM_TERMS)
+
+def _download(url,accept="*/*",limit=20_000_000):
+    req=urllib.request.Request(url,headers={"User-Agent":"UK-Outage-Viewer/1.0","Accept":accept})
+    with urllib.request.urlopen(req,timeout=25) as response: raw=response.read(limit+1)
+    if len(raw)>limit: raise ValueError("Roadworks feed exceeds download limit")
+    return raw
+
+def _srwr_zip_url():
+    page=_download(SRWR_PAGE,"text/html").decode("utf-8","replace")
+    links=re.findall(r'href=["\']([^"\']+\.zip(?:\?[^"\']*)?)',page,re.I)
+    if not links: raise ValueError("SRWR disruptions export ZIP was not found")
+    urls=[urllib.parse.urljoin(SRWR_PAGE+"/",link) for link in links]
+    return urls[0]
+
+def collect_srwr(source,make_event,parse_date):
+    raw=_download(_srwr_zip_url(),"application/zip",80_000_000)
+    records=[]; scanned=0
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        for name in archive.namelist():
+            if not name.lower().endswith(".csv"): continue
+            with archive.open(name) as fh:
+                reader=csv.DictReader(io.TextIOWrapper(fh,encoding="utf-8-sig",errors="replace"))
+                for row in reader:
+                    scanned+=1
+                    if not _telecom(row): continue
+                    status=_pick(row,"works status","work status","status") or "roadworks"
+                    if any(x in _norm(status) for x in ("cancelled","canceled","complete","completed")): continue
+                    promoter=_pick(row,"promoter organisation","promoter","organisation","undertaker") or "Telecom roadworks"
+                    ref=_pick(row,"promoter reference","works reference","work reference","reference") or hashlib.sha256(str(row).encode()).hexdigest()
+                    start=_pick(row,"start","start date","proposed start","actual start")
+                    end=_pick(row,"end","end date","proposed end","expected end")
+                    street=_pick(row,"street","street name","location","location description","address")
+                    town=_pick(row,"town","locality","area")
+                    desc=_pick(row,"description","works description","work description","activity description") or ""
+                    item=make_event(source,ref,f"Telecom road works · {promoter}",start,status,
+                        ". ".join(x for x in (street,town,desc) if x),source["website"],region=town or street or "Scotland")
+                    item.update(evidenceType="roadworks-context",promoter=promoter,workReferenceNumber=ref,
+                        proposedStartAt=start,proposedEndAt=end,attribution="Scottish Road Works Register (SRWR)")
+                    records.append(item)
+    return records,{"coverage":"Scotland SRWR Disruptions Export; telecom-related current road works only.","scannedCount":scanned}
+
+def collect_traffic_wales(source,make_event,parse_date):
+    raw=_download(source["url"],"application/rss+xml, application/xml, text/xml")
+    root=ET.fromstring(raw); records=[]
+    for node in root.findall(".//item"):
+        def field(name):
+            child=node.find(name); return "".join(child.itertext()).strip() if child is not None else ""
+        title=_clean(field("title")); desc=_clean(field("description"))
+        link=field("link"); guid=field("guid") or link or hashlib.sha256(title.encode()).hexdigest()
+        published=field("pubDate")
+        combined=f"{title} {desc}"
+        start=re.search(r"\bStart\s*[:\-]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",combined,re.I)
+        end=re.search(r"\bEnd\s*[:\-]?\s*(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",combined,re.I)
+        item=make_event(source,guid,title,published,"roadworks",desc,link,region="Wales trunk-road network")
+        item.update(evidenceType="roadworks-context",proposedStartAt=start.group(1) if start else None,
+                    proposedEndAt=end.group(1) if end else None,attribution="Traffic Wales")
+        records.append(item)
+    return records,{"coverage":"Traffic Wales major roadworks on the Welsh motorway and trunk-road network.","scannedCount":len(records)}
