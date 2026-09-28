@@ -81,6 +81,7 @@ def collect_street_manager_open_data(source,make_event,parse_date):
                         "Street Manager Open Data Permit event. "+". ".join(bits),
                         source["website"],region=street or data.get("town") or source["scope"])
         item.update(evidenceType="roadworks-context",workReferenceNumber=wrn,
+                    locationDescription=" · ".join(x for x in (street,data.get("town")) if x),
                     permitReferenceNumber=data.get("permit_reference_number"),
                     promoter=promoter,workCategory=category,trafficManagementType=traffic,
                     usrn=data.get("usrn"),eventType=event_type,
