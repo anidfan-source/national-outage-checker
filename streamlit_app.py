@@ -321,6 +321,11 @@ def map_insight(point):
     st.write(point.get('title') or 'Untitled notice')
     st.caption(f"{point.get('category') or 'Evidence'} · {point.get('areaLabel') or 'Area unknown'}")
     st.write(f"**Status:** {point.get('status') or 'Not supplied'}")
+    if point.get('category_key') == 'environment':
+        st.markdown('**Alert context**')
+        st.write(point.get('description') or 'The alert did not include additional context.')
+        if point.get('published'):
+            st.caption(f"Alert published: {point['published']}")
     for label,field in (('Raised','raised'),('Start','start'),('Expected end','end')):
         if field in point: st.write(f"**{label}:** {point[field]}")
     if point.get('url'): st.link_button('Source details',point['url'])
@@ -330,7 +335,7 @@ def map_insight(point):
 
 def map_records(records, selection=None):
     points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
-             'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'status':item.get('status'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'url':item.get('url'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
+             'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'published':display_time(item.get('date'), 'not supplied'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'url':item.get('url'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
             for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     for i,point in enumerate(points): point.update(pointId=i,mapKey='outage_map')
     search_points=[{'lat':selection['lat'],'lon':selection['lng'],'postcode':selection['postcode']}] if selection and selection.get('lat') is not None and selection.get('lng') is not None else []
@@ -359,7 +364,7 @@ def impact_weight(item):
     except (TypeError, ValueError): return 1
 
 def impact_heatmap(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider'),'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'status':item.get('status'),'raised':display_time(item.get('raisedAt'),'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'),'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'),'not supplied'),'url':item.get('url')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider'),'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'published':display_time(item.get('date'),'not supplied'),'raised':display_time(item.get('raisedAt'),'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'),'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'),'not supplied'),'url':item.get('url')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     for i,point in enumerate(points): point.update(pointId=i,mapKey='impact_heatmap')
     if not points: st.info('No mapped locations match these filters.'); return
     chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
