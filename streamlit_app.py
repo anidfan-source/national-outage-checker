@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
+import urllib.request
 from zoneinfo import ZoneInfo
 
 import pydeck as pdk
@@ -27,6 +28,7 @@ st.markdown('''<style>
 }
 [data-testid="stSidebar"] [data-testid="InputInstructions"] {color:#667085!important}
 .eyebrow {color:#087f5b;font-weight:700;letter-spacing:.08em;font-size:.75rem;text-transform:uppercase}
+.deck-tooltip {max-width:min(320px,calc(100% - 24px))!important;white-space:normal!important;overflow-wrap:anywhere!important;pointer-events:none!important}
 </style>''', unsafe_allow_html=True)
 
 CATEGORY_LABELS = {'broadband':'Broadband & mobile backup','electricity':'Power cuts','third-party':'Cloud, DNS & apps','environment':'Weather & flood risk','routing':'Routing & internet signals','roadworks':'Street Manager / Roadworks'}
@@ -71,6 +73,55 @@ def configure_street_manager():
         if cfg.get('webhook_token'): os.environ['STREET_MANAGER_WEBHOOK_TOKEN'] = str(cfg['webhook_token'])
     except Exception:
         pass
+
+@st.cache_data(ttl=60, show_spinner=False)
+def street_manager_status():
+    """Read safe subscription/activity diagnostics from the protected receiver."""
+    url=os.getenv('STREET_MANAGER_WEBHOOK_URL','').rstrip('/')
+    token=os.getenv('STREET_MANAGER_WEBHOOK_TOKEN','')
+    if not url or not token:
+        raise RuntimeError('Street Manager Open Data receiver is not configured')
+    req=urllib.request.Request(url+'/api/status',headers={
+        'Accept':'application/json','Authorization':'Bearer '+token,
+        'User-Agent':'UK-Outage-Viewer/1.0'})
+    with urllib.request.urlopen(req,timeout=12) as response:
+        payload=json.loads(response.read(1_000_001))
+    if not payload.get('ok'):
+        raise RuntimeError('Street Manager receiver returned an invalid status response')
+    return payload
+
+def street_manager_health_panel():
+    """Show receiver health without exposing its URL token."""
+    st.subheader('Street Manager Open Data')
+    if not street_manager_configured():
+        st.info('Receiver not configured. Add its URL and read token to Streamlit secrets.')
+        return
+    try:
+        status=street_manager_status()
+    except Exception as error:
+        st.error(f'Receiver status unavailable: {type(error).__name__}: {error}')
+        return
+    subscriptions={row.get('topic'):row for row in status.get('subscriptions',[])}
+    activity={row.get('topic'):row for row in status.get('activity',[])}
+    stored={row.get('topic'):row for row in status.get('stored',[])}
+    expected=status.get('expectedTopics') or ['permit','activity','section-58']
+    total=sum(int(row.get('stored_count') or 0) for row in stored.values())
+    confirmed=sum(topic in subscriptions for topic in expected)
+    active=sum(int(activity.get(topic,{}).get('event_count') or 0)>0 for topic in expected)
+    for col,label,value in zip(st.columns(3),('Subscriptions confirmed','Topics receiving events','Stored events'),(f'{confirmed}/{len(expected)}',f'{active}/{len(expected)}',total)):
+        col.metric(label,value)
+    for topic in expected:
+        sub=subscriptions.get(topic,{})
+        act=activity.get(topic,{})
+        count=int(stored.get(topic,{}).get('stored_count') or 0)
+        label=topic.replace('-',' ').title()
+        if sub:
+            st.success(f"{label}: subscription confirmed · {count} stored event{'s' if count!=1 else ''}")
+            st.caption(f"Confirmed: {display_time(sub.get('confirmed_at'))} · Last received: {display_time(act.get('last_received_at'))} · Feed event count: {int(act.get('event_count') or 0)}")
+        else:
+            st.warning(f'{label}: subscription has not been confirmed by DfT/AWS SNS.')
+    if confirmed==len(expected) and total==0:
+        st.info('All subscriptions are confirmed, but no Street Manager events have been stored yet.')
 
 def configure_spen():
     """Expose the SPEN read-only Open Data key only to the collector process."""
@@ -279,7 +330,7 @@ def map_records(records, selection=None):
             initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
             views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
             layers=layers,
-            tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{category}<br/>{type}<br/>{areaLabel}<br/><i>Click to lock to this area</i>'},
+            tooltip={'html':'<div style="max-width:280px"><b>{provider}</b><br/>{title}<br/><span style="opacity:.85">{category} · {areaLabel}</span><br/><i>Click to lock to this area</i></div>','style':{'maxWidth':'300px','whiteSpace':'normal','overflowWrap':'anywhere'}},
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='outage_map'), 'outage_map')
@@ -292,7 +343,7 @@ def impact_weight(item):
 def impact_heatmap(records):
     points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     if not points: st.info('No mapped locations match these filters.'); return
-    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],tooltip={'html':'<b>{provider}</b><br/>{title}<br/>{areaLabel}<br/><i>Click to lock to this area</i>'},map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],tooltip={'html':'<div style="max-width:280px"><b>{provider}</b><br/>{title}<br/><span style="opacity:.85">{areaLabel}</span><br/><i>Click to lock to this area</i></div>','style':{'maxWidth':'300px','whiteSpace':'normal','overflowWrap':'anywhere'}},map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
     lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='impact_heatmap'), 'impact_heatmap')
 
 def incident_list(records, title='Published evidence'):
@@ -359,10 +410,7 @@ def category_view(key,title,description):
 
 def sources_view():
     header(DATA,'Data quality','Sources & connection health','See what is automated, stale or only a provider portal before relying on a result.'); records,summary=filters(DATA)
-    if street_manager_configured():
-        st.success('Street Manager Open Data receiver is configured securely. Streamlit pulls stored events without exposing the receiver token.')
-    else:
-        st.info('Street Manager Open Data is not configured. Add [street_manager] webhook_url/webhook_token to Streamlit secrets or set STREET_MANAGER_WEBHOOK_URL/STREET_MANAGER_WEBHOOK_TOKEN.')
+    street_manager_health_panel()
     states=Counter(s.get('state','unknown') for s in DATA['sources'])
     for col,state in zip(st.columns(4),('connected','stale','unavailable','portal-only')): col.metric(state.replace('-',' ').title(),states.get(state,0))
     exports(records,DATA,summary)
