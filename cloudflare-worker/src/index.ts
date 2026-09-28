@@ -17,6 +17,54 @@ const OBJECT_TYPES: Record<string, Set<string>> = {
 
 type SnsMessage = Record<string, string>;
 
+const TELECOM_TERMS = [
+  "telecom", "telecommunications", "broadband", "fibre", "fiber", "internet",
+  "openreach", "virgin media", "virginmedia", "cityfibre", "city fibre", "vodafone",
+  "voneus", "hyperoptic", "gigaclear", "community fibre", "communityfibre", "zzoomm",
+  "giganet", "toob", "talktalk", "telefonica",
+];
+
+const TELECOM_TOKENS = new Set(["bt", "ee", "o2", "three", "sky", "isp"]);
+const CANCELLED_TERMS = ["cancelled", "canceled", "cancel", "withdrawn", "revoked"];
+
+function normalise(value: unknown): string {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function eventData(event: Record<string, unknown>): Record<string, unknown> {
+  const data = event.object_data;
+  return data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : event;
+}
+
+function searchableText(event: Record<string, unknown>): string {
+  const data = eventData(event);
+  const fields = [
+    "promoter_organisation", "promoter_organisation_name", "work_description",
+    "activity_type", "work_type", "work_category", "works_description",
+    "description", "organisation_name", "promoter",
+  ];
+  return normalise(fields.map((field) => data[field]).filter(Boolean).join(" "));
+}
+
+function isTelecomEvent(event: Record<string, unknown>): boolean {
+  const text = searchableText(event);
+  if (!text) return false;
+  if (TELECOM_TERMS.some((term) => text.includes(normalise(term)))) return true;
+  const tokens = new Set(text.split(" "));
+  return [...TELECOM_TOKENS].some((term) => tokens.has(term));
+}
+
+function isCancelledEvent(event: Record<string, unknown>): boolean {
+  const data = eventData(event);
+  const statusText = normalise([
+    event.event_type, data.work_status, data.permit_status, data.status,
+    data.activity_status, data.event_type,
+  ].filter(Boolean).join(" "));
+  return CANCELLED_TERMS.some((term) => statusText.includes(term));
+}
+
 function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
@@ -149,6 +197,15 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
   if (objectType && !OBJECT_TYPES[topic].has(objectType)) {
     return json({ error: "Event object type does not match endpoint" }, 400);
   }
+  // Filter before D1: the national Street Manager feeds are extremely high volume.
+  // Subscription confirmations are handled above; only relevant live telecom works are persisted.
+  if (isCancelledEvent(event)) {
+    return json({ ok: true, topic, ignored: true, reason: "cancelled" });
+  }
+  if (!isTelecomEvent(event)) {
+    return json({ ok: true, topic, ignored: true, reason: "non-telecom" });
+  }
+
   await env.DB.batch([
     env.DB.prepare(
       `INSERT OR IGNORE INTO messages
