@@ -214,6 +214,12 @@ def collect(source):
         elif source['kind'] == 'street-manager-open-data':
             records, details = collect_street_manager_open_data(source, event, date)
             health.update(details)
+        elif source['kind'] == 'srwr':
+            records, details = collect_srwr(source, event, date)
+            health.update(details)
+        elif source['kind'] == 'traffic-wales':
+            records, details = collect_traffic_wales(source, event, date)
+            health.update(details)
         elif source['kind'] == 'npg':
             rows = []
             for offset in range(0, 10000, 100):
