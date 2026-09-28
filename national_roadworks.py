@@ -31,15 +31,21 @@ def _download(url,accept="*/*",limit=20_000_000):
     return raw
 
 def _srwr_zip_url():
-    page=_download(SRWR_PAGE,"text/html").decode("utf-8","replace")
-    links=re.findall(r'href=["\']([^"\']+\.zip(?:\?[^"\']*)?)',page,re.I)
-    if not links: raise ValueError("SRWR disruptions export ZIP was not found")
-    urls=[urllib.parse.urljoin(SRWR_PAGE+"/",link) for link in links]
-    return urls[0]
+    api=SRWR_PAGE.rstrip('/')+"/api/v1/files"
+    payload=__import__('json').loads(_download(api,"application/json"))
+    files=payload.get("files") if isinstance(payload,dict) else None
+    if not isinstance(files,list) or not files or not files[0].get("name"):
+        raise ValueError("SRWR disruptions export file list is empty")
+    name=files[0]["name"]
+    file_payload=__import__('json').loads(_download(SRWR_PAGE.rstrip('/')+"/api/v1/file/"+urllib.parse.quote(name),"application/json"))
+    url=file_payload.get("url") if isinstance(file_payload,dict) else None
+    if not url: raise ValueError("SRWR disruptions export download URL was not returned")
+    return url
 
 def collect_srwr(source,make_event,parse_date):
     raw=_download(_srwr_zip_url(),"application/zip",80_000_000)
     records=[]; scanned=0
+    csv.field_size_limit(10_000_000)
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         for name in archive.namelist():
             if not name.lower().endswith(".csv"): continue
