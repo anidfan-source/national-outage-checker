@@ -59,6 +59,15 @@ class ConnectorTests(unittest.TestCase):
         self.assertEqual(health['state'],'unavailable')
         self.assertIsNone(rows)
 
+    def test_roadworks_collectors_are_dispatched(self):
+        for kind, collector in (('srwr', 'collect_srwr'), ('traffic-wales', 'collect_traffic_wales')):
+            source = {**self.source, 'kind': kind, 'category': 'roadworks'}
+            with patch(f'server.{collector}', return_value=([], {'scannedCount': 0})) as mocked:
+                health, rows = server.collect(source)
+            mocked.assert_called_once()
+            self.assertEqual(health['state'], 'connected')
+            self.assertEqual(rows, [])
+
     def test_unresolved_not_lost_to_history_cap(self):
         with patch('server.fetch',side_effect=[b'{"incidents":[]}', b'{"incidents":[{"id":"old","name":"Still active"}]}']):
             health, rows = server.collect(self.source)
