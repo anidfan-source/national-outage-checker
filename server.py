@@ -21,6 +21,7 @@ from sources import SOURCES
 from locations import enrich, reference_summary
 from public_connectors import collect_public, outdated
 from street_manager_open_data import collect_street_manager_open_data
+from national_roadworks import collect_srwr, collect_traffic_wales
 
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'data' / 'outages.sqlite3'
