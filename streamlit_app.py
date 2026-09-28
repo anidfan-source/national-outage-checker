@@ -28,7 +28,6 @@ st.markdown('''<style>
 }
 [data-testid="stSidebar"] [data-testid="InputInstructions"] {color:#667085!important}
 .eyebrow {color:#087f5b;font-weight:700;letter-spacing:.08em;font-size:.75rem;text-transform:uppercase}
-.deck-tooltip {max-width:min(320px,calc(100% - 24px))!important;white-space:normal!important;overflow-wrap:anywhere!important;pointer-events:none!important}
 </style>''', unsafe_allow_html=True)
 
 CATEGORY_LABELS = {'broadband':'Broadband & mobile backup','electricity':'Power cuts','third-party':'Cloud, DNS & apps','environment':'Weather & flood risk','routing':'Routing & internet signals','roadworks':'Street Manager / Roadworks'}
@@ -303,19 +302,37 @@ def exports(records, data, summary):
     b.download_button('Source health CSV',source_health_csv_bytes(payload),filename('sources.csv'),'text/csv',use_container_width=True)
     c.download_button('Complete JSON',json.dumps(payload,ensure_ascii=False,indent=2),filename('json'),'application/json',use_container_width=True)
 
-def lock_map_selection(event, key):
-    """Persist a selected map point as the next-run location filter."""
+def selected_map_point(event, points):
+    """Return a selected point only while it is present in the current filtered map."""
     objects=(event.selection or {}).get('objects',{}) if event else {}
-    selected=next((item for layer in objects.values() for item in layer if item.get('area')),None)
-    if selected and st.session_state.get('map_selection_applied') != (key,selected['area']):
-        st.session_state['map_selection_applied']=(key,selected['area'])
-        st.session_state['map_area_pending']=selected['area']
+    selected=next((item for layer in objects.values() for item in layer if item.get('pointId') is not None),None)
+    if selected:
+        return next((point for point in points if point['pointId']==selected['pointId'] and
+                     point['lat']==selected.get('lat') and point['lon']==selected.get('lon') and
+                     point['title']==selected.get('title')),None)
+    return None
+
+def map_insight(point):
+    st.subheader('Map insight')
+    if not point:
+        st.info('Select a marker to see its published details here.')
+        return
+    st.markdown(f"**{point.get('provider') or 'Unknown provider'}**")
+    st.write(point.get('title') or 'Untitled notice')
+    st.caption(f"{point.get('category') or 'Evidence'} · {point.get('areaLabel') or 'Area unknown'}")
+    st.write(f"**Status:** {point.get('status') or 'Not supplied'}")
+    for label,field in (('Raised','raised'),('Start','start'),('Expected end','end')):
+        if field in point: st.write(f"**{label}:** {point[field]}")
+    if point.get('url'): st.link_button('Source details',point['url'])
+    if point.get('area') and st.button(f"Filter to {point['areaLabel']}",key='filter_'+point['mapKey']):
+        st.session_state['map_area_pending']=point['area']
         st.rerun()
 
 def map_records(records, selection=None):
     points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
-             'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'status':item.get('status'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
+             'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'status':item.get('status'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'url':item.get('url'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
             for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    for i,point in enumerate(points): point.update(pointId=i,mapKey='outage_map')
     search_points=[{'lat':selection['lat'],'lon':selection['lng'],'postcode':selection['postcode']}] if selection and selection.get('lat') is not None and selection.get('lng') is not None else []
     if points or search_points:
         legend='&nbsp;&nbsp;'.join(f'<span style="color:rgb({color[0]},{color[1]},{color[2]});font-weight:700">●</span> {CATEGORY_LABELS[key]}' for key,color in CATEGORY_COLORS.items())
@@ -330,10 +347,11 @@ def map_records(records, selection=None):
             initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
             views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
             layers=layers,
-            tooltip={'html':'<div style="max-width:280px"><b>{provider}</b><br/>{title}<br/><span style="opacity:.85">{category} · {areaLabel}</span><br/><b>Status:</b> {status}<br/><b>Raised:</b> {raised}<br/><b>Start:</b> {start}<br/><b>Expected end:</b> {end}<br/><i>Click to lock to this area</i></div>','style':{'maxWidth':'300px','whiteSpace':'normal','overflowWrap':'anywhere'}},
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
-        lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='outage_map'), 'outage_map')
+        left,right=st.columns((3,2),gap='large')
+        with left: event=st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='outage_map')
+        with right: map_insight(selected_map_point(event,points))
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
 def impact_weight(item):
@@ -341,10 +359,13 @@ def impact_weight(item):
     except (TypeError, ValueError): return 1
 
 def impact_heatmap(records):
-    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider'),'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'status':item.get('status'),'raised':display_time(item.get('raisedAt'),'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'),'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'),'not supplied'),'url':item.get('url')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+    for i,point in enumerate(points): point.update(pointId=i,mapKey='impact_heatmap')
     if not points: st.info('No mapped locations match these filters.'); return
-    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],tooltip={'html':'<div style="max-width:280px"><b>{provider}</b><br/>{title}<br/><span style="opacity:.85">{areaLabel}</span><br/><i>Click to lock to this area</i></div>','style':{'maxWidth':'300px','whiteSpace':'normal','overflowWrap':'anywhere'}},map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
-    lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='impact_heatmap'), 'impact_heatmap')
+    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    left,right=st.columns((3,2),gap='large')
+    with left: event=st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='impact_heatmap')
+    with right: map_insight(selected_map_point(event,points))
 
 def incident_list(records, title='Published evidence'):
     st.subheader(f'{title} ({len(records)})')
@@ -388,13 +409,12 @@ def correlated_view():
     if overlaps:
         for area,items in sorted(overlaps,key=lambda x:len(x[1]),reverse=True)[:6]: st.info(f"**{area_label(area)}** · {len(items)} matching notices across {', '.join(sorted({CATEGORY_LABELS.get(x.get('category'),x.get('category')) for x in items}))}. Review source records before attributing a cause.")
     else: st.caption('No multi-source geographic overlap is visible in the selected records.')
-    left,right=st.columns((3,2))
-    with left: st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postcode centroids, telephone and probe locations are approximate.'); map_records(records,summary.get('resolvedLocation'))
-    with right:
-        trend=Counter((x.get('date') or '')[:10] for x in records if x.get('date')); st.subheader('Notice trend')
-        if trend: st.bar_chart({day:trend[day] for day in sorted(trend)})
-        else: st.caption('No dated records in this selection.')
-        exports(records,DATA,summary)
+    st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postcode centroids, telephone and probe locations are approximate. Select a marker for details.')
+    map_records(records,summary.get('resolvedLocation'))
+    trend=Counter((x.get('date') or '')[:10] for x in records if x.get('date')); st.subheader('Notice trend')
+    if trend: st.bar_chart({day:trend[day] for day in sorted(trend)})
+    else: st.caption('No dated records in this selection.')
+    exports(records,DATA,summary)
     incident_list(records,'All matching evidence')
 
 def trends_view():
@@ -411,9 +431,8 @@ def category_view(key,title,description):
     header(DATA,CATEGORY_LABELS[key],title,description); records,summary=filters(DATA,[key])
     values=(len(records),len({x.get('provider') for x in records}),len({a for x in records for a in x.get('postcodeAreas',[])}))
     for col,label,value in zip(st.columns(3),('Matching notices','Providers represented','Postcode areas mentioned'),values): col.metric(label,value)
-    left,right=st.columns((3,2))
-    with left: st.subheader('Locations'); map_records(records,summary.get('resolvedLocation'))
-    with right: exports(records,DATA,summary); st.caption(LIMITATIONS)
+    st.subheader('Locations'); map_records(records,summary.get('resolvedLocation'))
+    exports(records,DATA,summary); st.caption(LIMITATIONS)
     incident_list(records)
 
 def sources_view():
@@ -448,9 +467,8 @@ def weather_view():
         st.link_button('Search the Met Office historic warning archive','https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service')
     values=(len(records),len({x.get('provider') for x in records}),len({a for x in records for a in x.get('postcodeAreas',[])}))
     for col,label,value in zip(st.columns(3),('Matching notices','Providers represented','Postcode areas mentioned'),values): col.metric(label,value)
-    left,right=st.columns((3,2))
-    with left: st.subheader('Locations'); map_records(records,summary.get('resolvedLocation'))
-    with right: exports(records,DATA,summary); st.caption(LIMITATIONS)
+    st.subheader('Locations'); map_records(records,summary.get('resolvedLocation'))
+    exports(records,DATA,summary); st.caption(LIMITATIONS)
     incident_list(records)
 def routing_view(): category_view('routing','Internet routing signals','Passive evidence of wider connectivity changes. These signals are not confirmed ISP outages.')
 def services_view(): category_view('third-party','Online services','Cloud, DNS and application issues that can resemble a home broadband problem.')
@@ -465,4 +483,3 @@ except Exception as error: st.error(f'Unable to collect feeds: {type(error).__na
 
 navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
 navigation.run()
-
