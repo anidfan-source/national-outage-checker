@@ -41,6 +41,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn("st.columns((3,2),gap='large')", source)
         self.assertIn("point.get('category_key') == 'environment'", source)
         self.assertIn('Alert context', source)
+        self.assertIn('Roadworks detail', source)
+        self.assertIn("point.get('promoter')", source)
         self.assertIn("on_select='rerun'", source)
         self.assertIn('map_area_pending', source)
         self.assertIn('def area_label', source)
