@@ -314,7 +314,7 @@ def lock_map_selection(event, key):
 
 def map_records(records, selection=None):
     points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
-             'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
+             'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'status':item.get('status'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
             for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     search_points=[{'lat':selection['lat'],'lon':selection['lng'],'postcode':selection['postcode']}] if selection and selection.get('lat') is not None and selection.get('lng') is not None else []
     if points or search_points:
@@ -330,7 +330,7 @@ def map_records(records, selection=None):
             initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
             views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
             layers=layers,
-            tooltip={'html':'<div style="max-width:280px"><b>{provider}</b><br/>{title}<br/><span style="opacity:.85">{category} · {areaLabel}</span><br/><i>Click to lock to this area</i></div>','style':{'maxWidth':'300px','whiteSpace':'normal','overflowWrap':'anywhere'}},
+            tooltip={'html':'<div style="max-width:280px"><b>{provider}</b><br/>{title}<br/><span style="opacity:.85">{category} · {areaLabel}</span><br/><b>Status:</b> {status}<br/><b>Raised:</b> {raised}<br/><b>Start:</b> {start}<br/><b>Expected end:</b> {end}<br/><i>Click to lock to this area</i></div>','style':{'maxWidth':'300px','whiteSpace':'normal','overflowWrap':'anywhere'}},
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         lock_map_selection(st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='outage_map'), 'outage_map')
@@ -359,6 +359,14 @@ def incident_list(records, title='Published evidence'):
                 st.caption(f"Status: {item.get('status')} · Identified: {display_time(item.get('identifiedAt') or item.get('observedAt'))} · Provider-reported time: {display_time(item.get('date'))} (after first fetch) · Last fetched: {display_time(item.get('observedAt'))}")
             else:
                 st.caption(f"Status: {item.get('status')} · Reported: {display_time(item.get('date'), 'not supplied')} · Last fetched: {display_time(item.get('observedAt'))}")
+            if item.get('category')=='roadworks':
+                timeline=[]
+                if item.get('raisedAt'): timeline.append('Raised: '+display_time(item['raisedAt']))
+                if item.get('proposedStartAt'): timeline.append('Planned start: '+display_time(item['proposedStartAt']))
+                if item.get('actualStartAt'): timeline.append('Actual start: '+display_time(item['actualStartAt']))
+                if item.get('proposedEndAt'): timeline.append('Expected completion: '+display_time(item['proposedEndAt']))
+                if item.get('actualEndAt'): timeline.append('Actual completion: '+display_time(item['actualEndAt']))
+                if timeline: st.info(' · '.join(timeline))
             if item.get('stale'): st.warning('This record is stale because its source is unavailable or its published data is old.')
             details=[]
             if item.get('evidenceType'): details.append(f"Evidence: {item['evidenceType']}")
