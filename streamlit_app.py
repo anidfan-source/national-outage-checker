@@ -394,6 +394,11 @@ def incident_list(records, title='Published evidence'):
             else:
                 st.caption(f"Status: {item.get('status')} · Reported: {display_time(item.get('date'), 'not supplied')} · Last fetched: {display_time(item.get('observedAt'))}")
             if item.get('category')=='roadworks':
+                roadwork_details=[]
+                if item.get('promoter'): roadwork_details.append('Promoter: '+str(item['promoter']))
+                if item.get('workReferenceNumber'): roadwork_details.append('Work reference: '+str(item['workReferenceNumber']))
+                if item.get('locationDescription'): roadwork_details.append('Location: '+str(item['locationDescription']))
+                if roadwork_details: st.caption(' · '.join(roadwork_details))
                 timeline=[]
                 if item.get('raisedAt'): timeline.append('Raised: '+display_time(item['raisedAt']))
                 if item.get('proposedStartAt'): timeline.append('Planned start: '+display_time(item['proposedStartAt']))
