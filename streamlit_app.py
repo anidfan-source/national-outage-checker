@@ -29,11 +29,11 @@ st.markdown('''<style>
 .eyebrow {color:#087f5b;font-weight:700;letter-spacing:.08em;font-size:.75rem;text-transform:uppercase}
 </style>''', unsafe_allow_html=True)
 
-CATEGORY_LABELS = {'broadband':'Broadband & mobile backup','electricity':'Power cuts','third-party':'Cloud, DNS & apps','environment':'Weather & flood risk','routing':'Routing & internet signals'}
+CATEGORY_LABELS = {'broadband':'Broadband & mobile backup','electricity':'Power cuts','third-party':'Cloud, DNS & apps','environment':'Weather & flood risk','routing':'Routing & internet signals','roadworks':'Street Manager / Roadworks'}
 CATEGORY_COLORS = {
     'broadband':[0, 119, 182, 220], 'electricity':[220, 53, 69, 220],
     'third-party':[112, 48, 160, 220], 'environment':[8, 127, 91, 220],
-    'routing':[230, 126, 34, 220],
+    'routing':[230, 126, 34, 220], 'roadworks':[139, 92, 246, 220],
 }
 CLOSED = {'resolved','completed','postmortem'}
 NOT_ONGOING = CLOSED | {'scheduled'}
@@ -398,6 +398,7 @@ def weather_view():
     incident_list(records)
 def routing_view(): category_view('routing','Internet routing signals','Passive evidence of wider connectivity changes. These signals are not confirmed ISP outages.')
 def services_view(): category_view('third-party','Online services','Cloud, DNS and application issues that can resemble a home broadband problem.')
+def roadworks_view(): category_view('roadworks','Street Manager / Roadworks','Street works, permits and roadworks activity that may provide useful infrastructure context for an outage investigation.')
 
 configure_street_manager()
 configure_spen()
@@ -406,6 +407,6 @@ configure_cloudflare()
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
 
-navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
+navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
 navigation.run()
 
