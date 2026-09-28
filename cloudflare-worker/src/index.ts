@@ -200,6 +200,12 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
   // Filter before D1: the national Street Manager feeds are extremely high volume.
   // Subscription confirmations are handled above; only relevant live telecom works are persisted.
   if (isCancelledEvent(event)) {
+    const objectReference = event.object_reference || null;
+    if (objectReference) {
+      await env.DB.prepare(
+        "DELETE FROM messages WHERE topic = ? AND object_reference = ?",
+      ).bind(topic, objectReference).run();
+    }
     return json({ ok: true, topic, ignored: true, reason: "cancelled" });
   }
   if (!isTelecomEvent(event)) {
@@ -208,9 +214,16 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
 
   await env.DB.batch([
     env.DB.prepare(
-      `INSERT OR IGNORE INTO messages
+      `INSERT INTO messages
        (message_id, received_at, event_time, event_type, object_reference, object_type, topic, payload)
-       VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(topic, object_reference) WHERE object_reference IS NOT NULL DO UPDATE SET
+         message_id=excluded.message_id,
+         received_at=excluded.received_at,
+         event_time=excluded.event_time,
+         event_type=excluded.event_type,
+         object_type=excluded.object_type,
+         payload=excluded.payload`,
     ).bind(
       message.MessageId, event.event_time || null, event.event_type || null,
       event.object_reference || null, objectType, topic, JSON.stringify(event),
@@ -221,7 +234,7 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
        ON CONFLICT(topic) DO UPDATE SET last_event_at=excluded.last_event_at,
        last_received_at=excluded.last_received_at, event_count=topic_activity.event_count + 1`,
     ).bind(topic, event.event_time || null),
-    env.DB.prepare("DELETE FROM messages WHERE received_at < datetime('now', '-366 days')"),
+    env.DB.prepare("DELETE FROM messages WHERE received_at < datetime('now', '-90 days')"),
   ]);
   return json({ ok: true, topic });
 }
@@ -259,7 +272,7 @@ async function status(request: Request, env: Env): Promise<Response> {
     subscriptions: subscriptions.results,
     activity: activity.results,
     stored: totals.results,
-    retentionDays: 366,
+    retentionDays: 90,
   });
 }
 
