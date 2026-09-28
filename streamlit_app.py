@@ -254,15 +254,26 @@ def provider_time_after_fetch(item):
 
 def filters(data, page_categories=None):
     names={source['id']:source['name'] for source in data['sources']}
-    if st.session_state.get('map_area_pending'):
-        st.session_state['location_query']=st.session_state.pop('map_area_pending')
+    pending_area=st.session_state.pop('map_area_pending',None)
+    if pending_area:
+        st.session_state['location_query_input']=pending_area
+        st.session_state['location_query']=pending_area
     _,view_control,_=st.columns((1,2,1))
     with view_control:
         st.caption('SHOW INCIDENTS')
         mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
     with st.sidebar:
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
-        location_query=st.text_input('Location',placeholder='PA28 6AN, Glasgow, Scotland or Aberdeenshire',help='A full postcode is resolved through the open Postcodes.io API to its approximate centroid, district and ward. Partial postcode areas remain broad. You can also search by city, country, county or local authority.',key='location_query')
+        location_box,location_action=st.columns((4,1),gap='small')
+        with location_box:
+            location_input=st.text_input('Area or location',placeholder='PA, PA28, Glasgow or Aberdeenshire',help='Search by postcode area, postcode district, full postcode, town, city, county or local authority.',key='location_query_input',label_visibility='visible')
+        with location_action:
+            st.write(' ')
+            search_location=st.button('Search',key='location_search',use_container_width=True,type='primary')
+        if search_location:
+            st.session_state['location_query']=location_input.strip()
+            st.rerun()
+        location_query=st.session_state.get('location_query','')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
         query=st.text_input('Find a provider or issue',placeholder='Power cut, Zen, rain…')
