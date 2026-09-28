@@ -302,16 +302,6 @@ def exports(records, data, summary):
     b.download_button('Source health CSV',source_health_csv_bytes(payload),filename('sources.csv'),'text/csv',use_container_width=True)
     c.download_button('Complete JSON',json.dumps(payload,ensure_ascii=False,indent=2),filename('json'),'application/json',use_container_width=True)
 
-def selected_map_point(event, points):
-    """Return a selected point only while it is present in the current filtered map."""
-    objects=(event.selection or {}).get('objects',{}) if event else {}
-    selected=next((item for layer in objects.values() for item in layer if item.get('pointId') is not None),None)
-    if selected:
-        return next((point for point in points if point['pointId']==selected['pointId'] and
-                     point['lat']==selected.get('lat') and point['lon']==selected.get('lon') and
-                     point['title']==selected.get('title')),None)
-    return None
-
 def map_insight(point):
     st.subheader('Map insight')
     if not point:
@@ -341,6 +331,16 @@ def map_insight(point):
         st.session_state['map_area_pending']=point['area']
         st.rerun()
 
+def map_insight_picker(points, key):
+    """Choose a mapped record without relying on the PyDeck server event channel."""
+    if not points:
+        st.info('No mapped record details are available.')
+        return
+    options=points[:250]
+    if len(points)>len(options): st.caption(f"Showing the first {len(options)} mapped records; use the published evidence list for the full set.")
+    selected=st.selectbox('Mapped record',range(len(options)),format_func=lambda i: f"{options[i].get('provider') or 'Unknown provider'} · {options[i].get('title') or 'Untitled notice'}",key=key)
+    map_insight(options[selected])
+
 def map_records(records, selection=None):
     points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
              'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'locationDescription':item.get('locationDescription'),'promoter':item.get('promoter'),'workReferenceNumber':item.get('workReferenceNumber'),'trafficManagementType':item.get('trafficManagementType'),'published':display_time(item.get('date'), 'not supplied'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'url':item.get('url'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
@@ -363,8 +363,8 @@ def map_records(records, selection=None):
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         left,right=st.columns((3,2),gap='large')
-        with left: event=st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='outage_map')
-        with right: map_insight(selected_map_point(event,points))
+        with left: st.pydeck_chart(chart,width='stretch',key='outage_map')
+        with right: map_insight_picker(points,'outage_map_record')
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
 def impact_weight(item):
@@ -377,8 +377,8 @@ def impact_heatmap(records):
     if not points: st.info('No mapped locations match these filters.'); return
     chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
     left,right=st.columns((3,2),gap='large')
-    with left: event=st.pydeck_chart(chart,width='stretch',on_select='rerun',selection_mode='single-object',key='impact_heatmap')
-    with right: map_insight(selected_map_point(event,points))
+    with left: st.pydeck_chart(chart,width='stretch',key='impact_heatmap')
+    with right: map_insight_picker(points,'impact_heatmap_record')
 
 def incident_list(records, title='Published evidence'):
     st.subheader(f'{title} ({len(records)})')
