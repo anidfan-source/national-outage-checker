@@ -81,9 +81,9 @@ for id, name, category, website, note in [
  ('sepa','SEPA flood warnings','environment','https://floodline.sepa.org.uk/floodupdates/','Scotland flood risk portal; adapter pending.'),
  ('nrw','Natural Resources Wales floods','environment','https://flood-warning.naturalresources.wales/','Wales flood risk portal; adapter pending.'),
  ('ni-flood','Northern Ireland flood information','environment','https://www.nidirect.gov.uk/articles/check-risk-flooding-your-area','Northern Ireland flood risk information; adapter pending.'),
- ('street-manager','Street Manager v7 roadworks','environment','https://www.gov.uk/guidance/find-and-use-roadworks-data','England roadworks data. Connected when API-user credentials are configured; the collector polls v7 /works/updates. Street Manager UI credentials are not API credentials.'),
+ ('street-manager','Street Manager v7 roadworks','roadworks','https://www.gov.uk/guidance/find-and-use-roadworks-data','England roadworks data. Connected when API-user credentials are configured; the collector polls v7 /works/updates. Street Manager UI credentials are not API credentials.'),
  ('ofcom-connected-nations','Ofcom Connected Nations coverage','broadband','https://www.ofcom.org.uk/phones-and-broadband/coverage-and-speeds/connected-nations','Coverage/resilience enrichment rather than live faults. Use downloadable/open datasets where licensing permits; API access may require a subscription key.'),
- ('one-network','one.network roadworks','environment','https://one.network/','Streetworks and cable-damage risk; licensed data integration needed.'),
+ ('one-network','one.network roadworks','roadworks','https://one.network/','Streetworks and cable-damage risk; licensed data integration needed.'),
  ('downtech','Downtech / Outages.co.uk community reports','broadband','https://outages.co.uk/','Downtech operates the UK Outages.co.uk crowd-reporting site. No documented data API or feed was found, so this is a manual reference rather than an automated source.'),
 ]:
     feed(id,name,category,'portal',None,website,'See provider coverage',note)
