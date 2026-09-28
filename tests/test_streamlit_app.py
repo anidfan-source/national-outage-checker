@@ -39,6 +39,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIn('trends_view', source)
         self.assertIn('map_insight(selected_map_point(event,points))', source)
         self.assertIn("st.columns((3,2),gap='large')", source)
+        self.assertIn("point.get('category_key') == 'environment'", source)
+        self.assertIn('Alert context', source)
         self.assertIn("on_select='rerun'", source)
         self.assertIn('map_area_pending', source)
         self.assertIn('def area_label', source)
