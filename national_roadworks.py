@@ -66,7 +66,9 @@ def collect_srwr(source,make_event,parse_date):
                     item=make_event(source,ref,f"Telecom road works · {promoter}",start,status,
                         ". ".join(x for x in (street,town,desc) if x),source["website"],region=town or street or "Scotland")
                     item.update(evidenceType="roadworks-context",promoter=promoter,workReferenceNumber=ref,
-                        proposedStartAt=start,proposedEndAt=end,attribution="Scottish Road Works Register (SRWR)")
+                        locationDescription=" · ".join(x for x in (street,town) if x),
+                        workDescription=desc, proposedStartAt=start,proposedEndAt=end,
+                        attribution="Scottish Road Works Register (SRWR)")
                     records.append(item)
     return records,{"coverage":"Scotland SRWR Disruptions Export; telecom-related current road works only.","scannedCount":scanned}
 
