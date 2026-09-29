@@ -27,9 +27,7 @@ class PublicConnectorTests(unittest.TestCase):
         with patch('public_connectors.get_pages',return_value=payload):
             health,rows=collect(self.source('nged'))
         self.assertEqual(health['state'],'stale')
-        self.assertEqual(rows[0]['status'],'resolved')
-        self.assertEqual(rows[0]['date'],'2020-07-01T09:00:00+00:00')
-        self.assertEqual(rows[0]['sourceStartRaw'],'2020-07-01T10:00:00')
+        self.assertEqual(rows,[])
 
     def test_spen_normalizes_live_outages(self):
         payload={'results':[{'fault_id':'sp-1','planned':False,'status':'Ongoing','date_of_reported_fault':'2026-09-27T12:00:00Z',
