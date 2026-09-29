@@ -404,7 +404,21 @@ def impact_heatmap(records):
 def incident_list(records, title='Published evidence'):
     st.subheader(f'{title} ({len(records)})')
     if not records: st.info('No matching records. This does not confirm normal service; inspect Source health for connection status.'); return
-    for item in records:
+    display_records=records
+    roadwork_records=[item for item in records if item.get('category')=='roadworks']
+    if len(roadwork_records)>100:
+        page_size=100
+        total_pages=(len(roadwork_records)+page_size-1)//page_size
+        page=st.number_input(
+            'Roadworks detail page',min_value=1,max_value=total_pages,
+            value=min(int(st.session_state.get('roadworks_detail_page',1)),total_pages),
+            step=1,key='roadworks_detail_page',
+        )
+        start=(page-1)*page_size
+        selected_roadworks=roadwork_records[start:start+page_size]
+        display_records=[item for item in records if item.get('category')!='roadworks']+selected_roadworks
+        st.caption(f'Showing roadworks {start+1}–{min(start+page_size,len(roadwork_records))} of {len(roadwork_records)}. Downloads still contain all matching records.')
+    for item in display_records:
         with st.expander(f"{item.get('provider')} · {item.get('title')}"):
             st.write(item.get('description') or 'No public description supplied.')
             if provider_time_after_fetch(item):
