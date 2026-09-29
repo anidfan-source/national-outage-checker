@@ -280,6 +280,25 @@ def grouped_sources(sources):
     portal=lambda source: source.get('kind')=='portal' or source.get('state')=='portal-only'
     return [source for source in ordered if not portal(source)], [source for source in ordered if portal(source)]
 
+def source_market_groups(sources):
+    """Group the already-filtered registry into local and shared source sections."""
+    groups=defaultdict(list)
+    for source in sources:
+        declared=source.get('markets') or source.get('market')
+        scope=text(source.get('scope'))
+        if declared and not isinstance(declared, (list, tuple, set)):
+            declared=[declared]
+        if declared and ACTIVE_MARKET in declared:
+            group=MARKETS[ACTIVE_MARKET]['label'] + ' sources'
+        elif scope.startswith('global'):
+            group='Global / shared sources'
+        else:
+            group=MARKETS[ACTIVE_MARKET]['label'] + ' sources'
+        groups[group].append(source)
+    preferred=[MARKETS[ACTIVE_MARKET]['label'] + ' sources','Global / shared sources']
+    return [(group, sorted(groups[group], key=lambda x:(x.get('category',''),x.get('name',''))))
+            for group in preferred if groups.get(group)]
+
 def area_label(area, reference=None):
     """Never imply that a broad postcode area identifies one representative town."""
     area=str(area or '')
@@ -648,14 +667,16 @@ def sources_view():
     ):
         st.subheader(f'{section} ({len(sources)})')
         st.caption(description)
-        for source in sources:
-            with st.expander(f"{source['name']} · {source.get('state','unknown')}"):
-                st.write(source.get('note') or source.get('scope')); st.caption(f"{CATEGORY_LABELS.get(source.get('category'),source.get('category'))} · {source.get('scope')}")
-                st.caption(f"Last attempt: {display_time(source.get('checkedAt'), 'not attempted')} · Last success: {display_time(source.get('lastSuccess'))}")
-                if source.get('sourceUpdatedAt'): st.caption('Source updated: '+display_time(source['sourceUpdatedAt']))
-                if source.get('coverage'): st.caption(source['coverage'])
-                if source.get('error'): st.error(source['error'])
-                if source.get('website'): st.link_button('Open provider / source',source['website'])
+        for market_group, grouped in source_market_groups(sources):
+            st.markdown(f'#### {market_group}')
+            for source in grouped:
+                with st.expander(f"{source['name']} · {source.get('state','unknown')}"):
+                    st.write(source.get('note') or source.get('scope')); st.caption(f"{CATEGORY_LABELS.get(source.get('category'),source.get('category'))} · {source.get('scope')}")
+                    st.caption(f"Last attempt: {display_time(source.get('checkedAt'), 'not attempted')} · Last success: {display_time(source.get('lastSuccess'))}")
+                    if source.get('sourceUpdatedAt'): st.caption('Source updated: '+display_time(source['sourceUpdatedAt']))
+                    if source.get('coverage'): st.caption(source['coverage'])
+                    if source.get('error'): st.error(source['error'])
+                    if source.get('website'): st.link_button('Open provider / source',source['website'])
 
 
 FEED_GUIDANCE = {
@@ -774,16 +795,20 @@ def feeds_howto_view():
     monitored,portal_only=grouped_sources(DATA['sources'])
     st.subheader(f'Automated and monitored feeds ({len(monitored)})')
     st.caption('Each panel uses the current registry entry, so the endpoint and provider links stay aligned with the dashboard.')
-    for source in monitored:
-        with st.expander(f"{source['name']} · {source.get('kind','feed')}"):
-            st.write(source.get('note') or source.get('scope') or 'Public source in the registry.')
-            feed_instructions(source)
+    for market_group, grouped in source_market_groups(monitored):
+        st.markdown(f'#### {market_group}')
+        for source in grouped:
+            with st.expander(f"{source['name']} · {source.get('kind','feed')}"):
+                st.write(source.get('note') or source.get('scope') or 'Public source in the registry.')
+                feed_instructions(source)
     st.subheader(f'Portal-only sources ({len(portal_only)})')
     st.caption('These entries need manual access, a customer account or provider-specific onboarding before they can be ingested reliably.')
-    for source in portal_only:
-        with st.expander(f"{source['name']} · provider page"):
-            st.write(source.get('note') or source.get('scope') or 'Provider page listed for manual checking.')
-            feed_instructions(source)
+    for market_group, grouped in source_market_groups(portal_only):
+        st.markdown(f'#### {market_group}')
+        for source in grouped:
+            with st.expander(f"{source['name']} · provider page"):
+                st.write(source.get('note') or source.get('scope') or 'Provider page listed for manual checking.')
+                feed_instructions(source)
     st.subheader('Operational checklist')
     st.markdown('''- Start with a small backfill and measure response size, parse time and duplicate rate.
 - Keep raw source payloads for replay when a parser changes.
