@@ -26,6 +26,8 @@ const TELECOM_TERMS = [
 
 const TELECOM_TOKENS = new Set(["bt", "ee", "o2", "three", "sky", "isp"]);
 const CANCELLED_TERMS = ["cancelled", "canceled", "cancel", "withdrawn", "revoked"];
+const CLOSED_RETENTION_DAYS = 7;
+const ACTIVE_RETENTION_DAYS = 90;
 
 function normalise(value: unknown): string {
   return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
@@ -243,7 +245,21 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
        ON CONFLICT(topic) DO UPDATE SET last_event_at=excluded.last_event_at,
        last_received_at=excluded.last_received_at, event_count=topic_activity.event_count + 1`,
     ).bind(topic, event.event_time || null),
-    env.DB.prepare("DELETE FROM messages WHERE received_at < datetime('now', '-90 days')"),
+    env.DB.prepare(
+      `DELETE FROM messages
+       WHERE received_at < datetime('now', '-${CLOSED_RETENTION_DAYS} days')
+       AND (
+         lower(payload) LIKE '%completed%'
+         OR lower(payload) LIKE '%complete%'
+         OR lower(payload) LIKE '%closed%'
+         OR lower(payload) LIKE '%finished%'
+         OR lower(payload) LIKE '%cancelled%'
+         OR lower(payload) LIKE '%canceled%'
+         OR lower(payload) LIKE '%withdrawn%'
+         OR lower(payload) LIKE '%revoked%'
+       )`,
+    ),
+    env.DB.prepare(`DELETE FROM messages WHERE received_at < datetime('now', '-${ACTIVE_RETENTION_DAYS} days')`),
   ]);
   return json({ ok: true, topic });
 }
@@ -281,7 +297,8 @@ async function status(request: Request, env: Env): Promise<Response> {
     subscriptions: subscriptions.results,
     activity: activity.results,
     stored: totals.results,
-    retentionDays: 90,
+    retentionDays: ACTIVE_RETENTION_DAYS,
+    closedRetentionDays: CLOSED_RETENTION_DAYS,
   });
 }
 
