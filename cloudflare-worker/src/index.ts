@@ -32,20 +32,29 @@ function normalise(value: unknown): string {
 }
 
 function eventData(event: Record<string, unknown>): Record<string, unknown> {
-  const data = event.object_data;
-  return data && typeof data === "object" && !Array.isArray(data)
-    ? data as Record<string, unknown>
-    : event;
+  const raw = event.object_data;
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    } catch { /* use the outer event */ }
+  }
+  return event;
+}
+
+function scalarValues(value: unknown): string[] {
+  if (value == null) return [];
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return [String(value)];
+  if (Array.isArray(value)) return value.flatMap(scalarValues);
+  if (typeof value === "object") return Object.values(value as Record<string, unknown>).flatMap(scalarValues);
+  return [];
 }
 
 function searchableText(event: Record<string, unknown>): string {
-  const data = eventData(event);
-  const fields = [
-    "promoter_organisation", "promoter_organisation_name", "work_description",
-    "activity_type", "work_type", "work_category", "works_description",
-    "description", "organisation_name", "promoter",
-  ];
-  return normalise(fields.map((field) => data[field]).filter(Boolean).join(" "));
+  // Street Manager payloads have changed field names between notification types.
+  // Search all scalar values so telecom works are not discarded because a field moved.
+  return normalise(scalarValues(eventData(event)).join(" "));
 }
 
 function isTelecomEvent(event: Record<string, unknown>): boolean {

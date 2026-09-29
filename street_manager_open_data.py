@@ -13,11 +13,23 @@ ACTIVE_TERMS=('in progress','in_progress','in-progress','started','active','work
 def _normalise(value):
     return re.sub(r'[^a-z0-9]+',' ',str(value or '').casefold()).strip()
 
+def _key(value):
+    return re.sub(r'[^a-z0-9]+','_',str(value or '').casefold()).strip('_')
+
+def _row_data(row):
+    data=row.get('object_data') or {}
+    if isinstance(data,str):
+        try: data=json.loads(data)
+        except (TypeError,ValueError): data={}
+    return data if isinstance(data,dict) else row
+
 def _is_telecom_record(data):
     fields=[
-        _value(data,'promoter_organisation','promoter_organisation_name','promoter_name'),
-        _value(data,'work_description','description','activity_type','work_type','work_category'),
+        _value(data,'promoter_organisation','promoter_organisation_name','promoter_name','organisation_name','promoter'),
+        _value(data,'work_description','works_description','description','activity_type','work_type','work_category','activity_description'),
     ]
+    if not any(fields):
+        fields=[value for value in data.values() if isinstance(value,(str,int,float))]
     haystack=' '.join(_normalise(value) for value in fields if value)
     return any(term in haystack for term in TELECOM_TERMS)
 
@@ -33,8 +45,11 @@ def _display_status(data,event_type):
     return raw
 
 def _value(row,*names):
+    if not isinstance(row,dict): return None
+    by_key={_key(k):v for k,v in row.items()}
     for name in names:
-        if row.get(name) not in (None,""): return row[name]
+        value=by_key.get(_key(name))
+        if value not in (None,""): return value
     return None
 
 def collect_street_manager_open_data(source,make_event,parse_date):
@@ -53,7 +68,7 @@ def collect_street_manager_open_data(source,make_event,parse_date):
     if not isinstance(rows,list): raise ValueError("Street Manager Open Data response has no events array")
     records=[]
     for row in rows:
-        data=row.get("object_data") or {}
+        data=_row_data(row)
         wrn=_value(data,"work_reference_number") or row.get("object_reference")
         if not wrn: continue
         event_type=row.get("event_type")
