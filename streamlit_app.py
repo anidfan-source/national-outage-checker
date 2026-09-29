@@ -368,8 +368,22 @@ def render_map_chart(chart, points, chart_key, selector_key):
         selection_options={'on_'+'select':'rerun','selection_'+'mode':'single-object'}
         event=st.pydeck_chart(chart,**selection_options,key=chart_key)
         objects=getattr(getattr(event,'selection',None),'objects',[]) if event else []
+        if isinstance(objects,dict):
+            objects=[objects]
+        elif objects and not isinstance(objects,(list,tuple)):
+            try:
+                objects=list(objects)
+            except TypeError:
+                objects=[]
         if objects:
-            point_id=objects[0].get('pointId') if isinstance(objects[0],dict) else None
+            selected_object=objects[0]
+            if isinstance(selected_object,dict):
+                point_id=selected_object.get('pointId')
+            else:
+                try:
+                    point_id=selected_object['pointId']
+                except (KeyError,TypeError,IndexError):
+                    point_id=getattr(selected_object,'pointId',None)
             if point_id is not None:
                 selected=next((index for index,point in enumerate(points) if point.get('pointId')==point_id),None)
                 if selected is not None:
