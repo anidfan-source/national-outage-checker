@@ -140,7 +140,7 @@ def configure_cloudflare():
     except Exception:
         pass
 
-@st.cache_data(ttl=120, show_spinner='Refreshing public outage feeds…')
+@st.cache_data(ttl=300, show_spinner='Refreshing public outage feeds…')
 def load_dashboard():
     """Refresh the collectors and return a consistent dashboard snapshot."""
     server.init_db()
@@ -362,6 +362,23 @@ def map_insight_picker(points, key):
     selected=st.selectbox('Mapped record',range(len(options)),format_func=lambda i: f"{options[i].get('provider') or 'Unknown provider'} · {options[i].get('title') or 'Untitled notice'}",key=key)
     map_insight(options[selected])
 
+def render_map_chart(chart, points, chart_key, selector_key):
+    """Use native PyDeck selection when available, with selector fallback."""
+    try:
+        event=st.pydeck_chart(
+            chart,on_select='rerun',selection_mode='single-object',key=chart_key,
+        )
+        objects=getattr(getattr(event,'selection',None),'objects',[]) if event else []
+        if objects:
+            point_id=objects[0].get('pointId') if isinstance(objects[0],dict) else None
+            if point_id is not None:
+                selected=next((index for index,point in enumerate(points) if point.get('pointId')==point_id),None)
+                if selected is not None:
+                    st.session_state[selector_key]=selected
+        return event
+    except TypeError:
+        return st.pydeck_chart(chart,key=chart_key)
+
 def map_records(records, selection=None):
     points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
              'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'locationDescription':item.get('locationDescription'),'promoter':item.get('promoter'),'workReferenceNumber':item.get('workReferenceNumber'),'trafficManagementType':item.get('trafficManagementType'),'sourceFields':item.get('sourceFields'),'published':display_time(item.get('date'), 'not supplied'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'url':item.get('url'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
@@ -372,8 +389,8 @@ def map_records(records, selection=None):
         legend='&nbsp;&nbsp;'.join(f'<span style="color:rgb({color[0]},{color[1]},{color[2]});font-weight:700">●</span> {CATEGORY_LABELS[key]}' for key,color in CATEGORY_COLORS.items())
         st.markdown(f'<div style="font-size:.85rem;margin:.2rem 0 .6rem">{legend}</div>',unsafe_allow_html=True)
         centre=search_points[0] if search_points else {'lat':54.5,'lon':-3.4}
-        layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=9000,radius_min_pixels=5,radius_max_pixels=14,
-                              get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True)]
+        layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=5000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=9,
+                              get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True,auto_highlight=True)]
         if search_points: layers.append(pdk.Layer('ScatterplotLayer',data=search_points,get_position='[lon, lat]',get_radius=700,
             radius_min_pixels=8,radius_max_pixels=12,get_fill_color='[255,255,255,30]',get_line_color='[13,110,253,255]',
             line_width_min_pixels=3,stroked=True,pickable=True))
@@ -384,7 +401,7 @@ def map_records(records, selection=None):
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         left,right=st.columns((3,2),gap='large')
-        with left: st.pydeck_chart(chart,width='stretch',key='outage_map')
+        with left: render_map_chart(chart,points,'outage_map','outage_map_record')
         with right: map_insight_picker(points,'outage_map_record')
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
@@ -396,9 +413,9 @@ def impact_heatmap(records):
     points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider'),'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'locationDescription':item.get('locationDescription'),'promoter':item.get('promoter'),'workReferenceNumber':item.get('workReferenceNumber'),'trafficManagementType':item.get('trafficManagementType'),'sourceFields':item.get('sourceFields'),'published':display_time(item.get('date'),'not supplied'),'raised':display_time(item.get('raisedAt'),'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'),'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'),'not supplied'),'url':item.get('url')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     for i,point in enumerate(points): point.update(pointId=i,mapKey='impact_heatmap')
     if not points: st.info('No mapped locations match these filters.'); return
-    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=12000,radius_min_pixels=12,get_fill_color='[0, 0, 0, 1]',pickable=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=3000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=8,get_fill_color='[0, 0, 0, 1]',pickable=True,auto_highlight=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
     left,right=st.columns((3,2),gap='large')
-    with left: st.pydeck_chart(chart,width='stretch',key='impact_heatmap')
+    with left: render_map_chart(chart,points,'impact_heatmap','impact_heatmap_record')
     with right: map_insight_picker(points,'impact_heatmap_record')
 
 def incident_list(records, title='Published evidence'):
