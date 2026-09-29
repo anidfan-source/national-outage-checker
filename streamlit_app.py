@@ -527,6 +527,140 @@ def sources_view():
                 if source.get('error'): st.error(source['error'])
                 if source.get('website'): st.link_button('Open provider / source',source['website'])
 
+
+FEED_GUIDANCE = {
+    'statuspage': ('Statuspage incident JSON', [
+        'GET the endpoint; credentials are normally not required.',
+        'Read incidents and retain id, name, status, impact, created_at, updated_at, resolved_at, shortlink and incident_updates.',
+        'Use id as the stable key and treat unresolved incidents as active; keep the canonical shortlink.'
+    ], 'id, name, status, impact, created_at, updated_at, resolved_at, shortlink, incident_updates', 'An empty response means no published incident, not guaranteed service health.'),
+    'rss': ('RSS / Atom feed', [
+        'Poll with a conditional GET where supported and keep ETag or Last-Modified.',
+        'Parse RSS item or Atom entry elements and map title, link, description, published/updated time and guid/id.',
+        'Deduplicate by guid/id plus provider, and keep the original link and raw text.'
+    ], 'guid/id, title, link, description/summary, pubDate/published/updated', 'RSS is a notice stream rather than a complete current-state database.'),
+    'google': ('Google Cloud incidents JSON', [
+        'GET the public JSON array; no API key is normally required.',
+        'Store id, external_desc, begin, end, updates and service_name; preserve updates as an incident evolves.',
+        'Treat a missing end as unresolved, but do not infer that an empty array means every service is healthy.'
+    ], 'id, external_desc, begin, end, updates, service_name', 'This is Google Cloud service context, not a geographic outage feed.'),
+    'flood': ('Environment Agency flood API', [
+        'GET items and paginate or filter when the response is large.',
+        'Map floodAreaID, description, timeRaised, severityLevel, message and timeMessageChanged.',
+        'Join floodAreaID to the flood-area endpoint when geometry or a centroid is needed.'
+    ], 'floodAreaID, description, timeRaised, severityLevel, message, timeMessageChanged', 'Warnings provide impact context; they do not confirm a broadband outage.'),
+    'npg': ('OpenDataSoft live power-cut API', [
+        'GET records and page with limit and offset; select only the fields you need where supported.',
+        'Use reference as the stable outage key and retain loggedtime, status, natureofoutage, description, latitude and longitude.',
+        'Poll on a schedule, upsert by reference and record retrieval time separately from provider time.'
+    ], 'reference, loggedtime, status, natureofoutage, description, latitude, longitude', 'Implement pagination; one response is not necessarily complete.'),
+    'community': ('Community report JSON', [
+        'GET the reports endpoint with its type and limit parameters, then follow provider pagination for older reports.',
+        'Normalize report id, created time, type, description, approximate location and source URL.',
+        'Deduplicate by provider report id and minimize personal or free-text data in the larger dataset.'
+    ], 'report id, createdAt, type/category, description, approximate location, source URL', 'Community reports are corroborating signals and may be incomplete or inaccurate.'),
+    'srwr': ('Scotland SRWR bulk export', [
+        'Call the download service file-list endpoint at /api/v1/files and choose the newest disruptions export.',
+        'Download /api/v1/file/{name}, unzip it and stream the CSV with a DictReader.',
+        'Upsert by work reference and retain promoter, location, status, traffic-management and planned/actual dates; cache the archive.'
+    ], 'work reference, promoter, location, status, traffic management, proposed/actual start and end', 'This is a bulk snapshot, not a per-event API. Do not download it on every page interaction.'),
+    'traffic-wales': ('Traffic Wales roadworks RSS', [
+        'Poll the RSS endpoint and parse guid, title, description, link and publication time.',
+        'Use guid where present; otherwise hash canonical link plus title and upsert the item.',
+        'Keep original text and link because the feed has fewer structured fields than SRWR.'
+    ], 'guid, title, description, link, pubDate', 'This is a notice stream, not a complete works register.'),
+    'street-manager-open-data': ('Street Manager Open Data push feed', [
+        'Apply to use the DfT SNS topics for permit, activity and section-58 notifications; this is push, not polling.',
+        'Expose an HTTPS SNS receiver, verify the AWS SNS signature and topic ARN, and confirm each subscription.',
+        'Persist raw notifications and normalize event id, work reference, promoter, status, coordinates and planned/actual dates.'
+    ], 'event id, work reference, notification type, promoter, status, coordinates, planned/actual dates', 'The dashboard connector is receiver-backed; public guidance does not provide a downloadable JSON snapshot.'),
+    'ssen': ('SSEN live faults JSON', [
+        'GET on a schedule and inspect the response schema before mapping fields.',
+        'Use the provider fault/reference id as the key; retain status, timestamps, affected customers, description and coordinates.',
+        'Upsert current faults and record observation time so stale data is distinguishable from a clear network.'
+    ], 'fault/reference id, status, timestamps, affected customers, description, latitude, longitude', 'Keep the provider response as raw JSON alongside the normalized record.'),
+    'spen': ('SP Energy Networks OpenDataSoft API', [
+        'Obtain a read-only SPEN Open Data key and send it using the provider-required header or query parameter.',
+        'Use limit/offset pagination and map outage id, status, timestamps, impact and coordinates.',
+        'Store the key in a secret manager and back off on 429/5xx responses.'
+    ], 'outage id, status, start/end, cause, affected customers, latitude, longitude', 'This feed is authenticated in the dashboard; plan key rotation and rate limits.'),
+    'nged': ('National Grid Electricity Distribution CKAN API', [
+        'Use datastore_search with the registry resource id and paginate with limit/offset.',
+        'Map record id, status, update time, affected area/count and geometry.',
+        'Persist the resource id and retrieval timestamp for reproducibility.'
+    ], 'record id, status, updated time, affected area/count, geometry', 'CKAN resources can be revised; retain the resource id and raw row.'),
+    'ioda': ('IODA network outage events API', [
+        'GET events and filter to the country/region and time window needed.',
+        'Use event id, datasource, entity, start/end, severity and confidence.',
+        'Deduplicate by provider event id and preserve detector/source metadata.'
+    ], 'event id, datasource, entity, start/end, severity, confidence', 'This is passive network intelligence, not a provider ticket.'),
+    'ripe': ('RIPE Atlas probes API', [
+        'GET and paginate probe metadata to build a location and ASN reference table.',
+        'Join measurements separately using probe id and measurement id; inventory alone is not an outage feed.',
+        'Store country, latitude/longitude, ASN, status and last-seen time with a geographic privacy policy.'
+    ], 'probe id, measurement id, ASN, country, latitude, longitude, status, last seen', 'Probe inventory alone does not prove an outage.'),
+    'radar': ('Cloudflare Radar annotations API', [
+        'Create a read-only Cloudflare token with the required Radar permission and send it as a Bearer token.',
+        'Request annotations for the time/location window and map id, type, start/end, scope and description.',
+        'Cache responses, back off on rate limits and keep the token server-side.'
+    ], 'annotation id, type, start/end, scope, location, description', 'Radar annotations are network context, not local ISP confirmation.'),
+    'gointernet': ('Go Internet status page', [
+        'Fetch the public status page or its documented feed and retain the canonical incident link.',
+        'Prefer an official RSS/API over scraping presentation HTML.',
+        'Store title, status, published/updated time, description and link; deduplicate by incident link or provider id.'
+    ], 'incident id/link, title, status, published/updated, description', 'HTML parsing is a last resort and should be monitored for layout changes.')
+}
+DEFAULT_FEED_GUIDANCE = ('Provider public page or feed', [
+    'Open the source link and identify the documented API, RSS/Atom feed or downloadable dataset; prefer that over scraping.',
+    'Fetch on a schedule with timeouts, conditional requests and exponential backoff, then retain the raw response.',
+    'Map a stable id, title/description, status, timestamps, geography and canonical URL into the common schema.'
+], 'stable id, title, description, status, timestamps, geography, canonical URL', 'Portal-only sources are discovery links; they are not automatically monitored by this dashboard.')
+
+def feed_connection_guidance(source):
+    return FEED_GUIDANCE.get(source.get('id')) or FEED_GUIDANCE.get(source.get('kind')) or DEFAULT_FEED_GUIDANCE
+
+def feed_instructions(source):
+    label,steps,fields,caveat=feed_connection_guidance(source)
+    st.markdown(f'**Connection type:** {label}')
+    for index,step in enumerate(steps,1):
+        st.markdown(f'{index}. {step}')
+    st.markdown('**Useful normalized fields**')
+    st.code(fields,language='text')
+    st.caption(caveat)
+    endpoint=source.get('url')
+    website=source.get('website')
+    if endpoint:
+        st.markdown(f'[Open feed endpoint]({endpoint})')
+    if website and website != endpoint:
+        st.markdown(f'[Open provider documentation / landing page]({website})')
+
+def feeds_howto_view():
+    header(DATA,'Integration guide','How to connect public feeds','A practical starting point for adding these public sources to a larger outage, infrastructure or geospatial dataset.')
+    st.info('Use the source endpoint as evidence, not as a guarantee of normal service. Keep raw responses, normalize into a common schema, and record observedAt, sourceUpdatedAt and retrieval errors so downstream users can distinguish “no incident” from “no data”.')
+    st.subheader('A durable ingestion pattern')
+    st.code('fetch → validate → retain raw → normalize → deduplicate → upsert → expire stale records',language='text')
+    st.markdown('For every connector, use a bounded timeout, retries with exponential backoff, conditional requests where supported, a per-source rate limit and an error table. Store source id, fetch time, HTTP status, parser version and canonical source URL beside normalized records.')
+    st.markdown('A useful common record shape is: sourceId, provider, category, externalId, title, description, status, observedAt, sourceUpdatedAt, startAt, endAt, region, latitude, longitude, url and rawPayloadRef.')
+    monitored,portal_only=grouped_sources(DATA['sources'])
+    st.subheader(f'Automated and monitored feeds ({len(monitored)})')
+    st.caption('Each panel uses the current registry entry, so the endpoint and provider links stay aligned with the dashboard.')
+    for source in monitored:
+        with st.expander(f"{source['name']} · {source.get('kind','feed')}"):
+            st.write(source.get('note') or source.get('scope') or 'Public source in the registry.')
+            feed_instructions(source)
+    st.subheader(f'Portal-only sources ({len(portal_only)})')
+    st.caption('These entries need manual access, a customer account or provider-specific onboarding before they can be ingested reliably.')
+    for source in portal_only:
+        with st.expander(f"{source['name']} · provider page"):
+            st.write(source.get('note') or source.get('scope') or 'Provider page listed for manual checking.')
+            feed_instructions(source)
+    st.subheader('Operational checklist')
+    st.markdown('''- Start with a small backfill and measure response size, parse time and duplicate rate.
+- Keep raw source payloads for replay when a parser changes.
+- Partition larger datasets by source and observation date; index externalId, status and geography.
+- Paginate bulk APIs and stream ZIP/CSV exports; never render the whole source table in one browser interaction.
+- Treat credentials as server-side secrets and document licensing, retention and attribution requirements.''')
+
 def broadband_view(): category_view('broadband','Broadband & provider notices','Direct provider notices and connectivity reports that may affect a home connection.')
 def power_view(): category_view('electricity','Power cuts & infrastructure','Power incidents can interrupt home routers, street cabinets and local network equipment.')
 def weather_view():
@@ -551,5 +685,5 @@ configure_cloudflare()
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
 
-navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')]},position='sidebar')
+navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')],'Integrate':[st.Page(feeds_howto_view,title='How to connect feeds',icon='🔌')]},position='sidebar')
 navigation.run()
