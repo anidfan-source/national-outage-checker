@@ -12,7 +12,7 @@ import streamlit as st
 import server
 from historic_flood import fetch_historic_flood_warnings
 from historic_weather import fetch_historic_weather_warnings
-from locations import distance_km, lookup_postcode
+from locations import distance_km, lookup_postcode, named_place_point
 from reporting import LIMITATIONS, csv_bytes, report, source_health_csv_bytes
 
 st.set_page_config(page_title='National Outage Checker', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
@@ -303,7 +303,7 @@ def selected_location(value, reference):
             return {'code':None,'areas':[]}, 'Postcode not found. Check the full UK postcode and try again.'
         names=[resolved.get(k) for k in ('admin_ward','admin_district','admin_county','country') if resolved.get(k)]
         selection={'code':None,'areas':[re.match(r'[A-Z]+',resolved['outcode'])[0]],'district':resolved['outcode'],
-            'lat':resolved.get('latitude'),'lng':resolved.get('longitude'),'localNames':[x.casefold() for x in names],
+            'lat':resolved.get('latitude'),'lng':resolved.get('longitude'),'zoom':9,'localNames':[x.casefold() for x in names],
             'postcode':resolved['postcode']}
         return selection, f"{resolved['postcode']} · {' · '.join(dict.fromkeys(names))} · exact postcode centroid"
     normal=query.replace(' ','').replace('(','').replace(')','').replace('-','')
@@ -314,11 +314,17 @@ def selected_location(value, reference):
     place_matches=[entry for entry in reference.get('codes',[]) if entry.get('place','').casefold()==raw_query.casefold()]
     if place_matches:
         areas=sorted({area for entry in place_matches for area in entry.get('postcodeAreas',[])})
-        return {'code':None,'areas':areas,'place':raw_query.casefold()}, f"Town/city match: {raw_query} → {', '.join(areas) or 'postcode association unavailable'} (approximate town/city match)"
+        point=named_place_point(raw_query) or {}
+        selection={'code':None,'areas':areas,'place':raw_query.casefold(),
+                   'lat':point.get('lat'),'lng':point.get('lng'),'zoom':10 if point else None}
+        suffix=' · map centred on approximate town/city location' if point else ''
+        return selection, f"Town/city match: {raw_query} → {', '.join(areas) or 'postcode association unavailable'} (approximate town/city match){suffix}"
     match=re.match(r'^([A-Z]{1,2})(?:\d[A-Z\d]?(?:\d[A-Z]{2})?)?$',query.replace(' ',''))
     if match: return {'code':None,'areas':[match.group(1)]}, f'Postcode area {area_label(match.group(1),reference)} · not a household match'
     if re.fullmatch(r"[A-Za-z][A-Za-z .'-]{2,}", raw_query):
-        return {'code':None,'areas':[],'geography':raw_query.casefold()}, f'Country, county or local-authority match: {raw_query}'
+        point=named_place_point(raw_query) or {}
+        return {'code':None,'areas':[],'geography':raw_query.casefold(),
+                'lat':point.get('lat'),'lng':point.get('lng'),'zoom':10 if point else None}, f'Country, county or local-authority match: {raw_query}'
     return {'code':None,'areas':[]}, 'Enter a postcode, country, county or local authority.'
 
 def location_match(item, selection):
@@ -527,7 +533,7 @@ def map_records(records, selection=None):
              'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'locationDescription':item.get('locationDescription'),'promoter':item.get('promoter'),'workReferenceNumber':item.get('workReferenceNumber'),'trafficManagementType':item.get('trafficManagementType'),'sourceFields':item.get('sourceFields'),'published':display_time(item.get('date'), 'not supplied'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'url':item.get('url'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
             for item in records for p in item.get('locationPoints',[]) if market_point_in_bounds(p)]
     for i,point in enumerate(points): point.update(pointId=i,mapKey='outage_map')
-    search_points=[{'lat':selection['lat'],'lon':selection['lng'],'postcode':selection['postcode']}] if selection and selection.get('lat') is not None and selection.get('lng') is not None else []
+    search_points=[{'lat':selection['lat'],'lon':selection['lng'],'postcode':selection.get('postcode'),'title':selection.get('place') or selection.get('geography')}] if selection and selection.get('lat') is not None and selection.get('lng') is not None else []
     if points or search_points:
         legend='&nbsp;&nbsp;'.join(f'<span style="color:rgb({color[0]},{color[1]},{color[2]});font-weight:700">●</span> {CATEGORY_LABELS[key]}' for key,color in CATEGORY_COLORS.items())
         st.markdown(f'<div style="font-size:.85rem;margin:.2rem 0 .6rem">{legend}</div>',unsafe_allow_html=True)
@@ -538,7 +544,7 @@ def map_records(records, selection=None):
             id='search-location',radius_min_pixels=8,radius_max_pixels=12,get_fill_color='[255,255,255,30]',get_line_color='[13,110,253,255]',
             line_width_min_pixels=3,stroked=True,pickable=True))
         chart=pdk.Deck(
-            initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
+            initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=selection.get('zoom') or 9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
             views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':market_max_bounds()})],
             layers=layers,
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
