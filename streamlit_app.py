@@ -398,7 +398,7 @@ def filters(data, page_categories=None):
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
         location_box,location_action=st.columns((4,1),gap='small')
         with location_box:
-            location_input=st.text_input('Area or location',placeholder='PA, PA28, Glasgow or Aberdeenshire',help='Search by postcode area, postcode district, full postcode, town, city, county or local authority.',key='location_query_input',label_visibility='visible')
+            location_input=st.text_input('Area or location',placeholder='Country, region, city or local area',help='Search by country, region, city, postal code or local authority.',key='location_query_input',label_visibility='visible')
         with location_action:
             st.write(' ')
             search_location=st.button('Search',key='location_search',use_container_width=True,type='primary')
@@ -408,7 +408,7 @@ def filters(data, page_categories=None):
         location_query=st.session_state.get('location_query','')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
-        query=st.text_input('Find a provider or issue',placeholder='Power cut, Zen, rain…')
+        query=st.text_input('Find a provider or issue',placeholder='Outage, provider, weather or other issue…')
         days=st.slider('History days',1,365,30,disabled=mode=='Live',help='Choose History above to search earlier notices.')
         available=page_categories or list(CATEGORY_LABELS)
         categories=st.multiselect('Evidence types',available,default=available,format_func=CATEGORY_LABELS.get)
