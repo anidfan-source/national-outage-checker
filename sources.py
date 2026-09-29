@@ -1,10 +1,12 @@
 """Explicit source registry; portal entries are never presented as connected feeds."""
 SOURCES = []
 
-def feed(id, name, category, kind, url, website=None, scope='Global / UK impact unconfirmed', note=''):
-    SOURCES.append(dict(id=id, name=name, category=category, kind=kind, url=url,
-                        website=website or url, scope=scope, note=note))
-
+def feed(id, name, category, kind, url, website=None, scope='Global / UK impact unconfirmed', note='', markets=None):
+    entry = dict(id=id, name=name, category=category, kind=kind, url=url,
+                 website=website or url, scope=scope, note=note)
+    if markets:
+        entry['markets'] = markets
+    SOURCES.append(entry)
 for id, name, host in [
     ('cloudflare', 'Cloudflare / 1.1.1.1', 'www.cloudflarestatus.com'),
     ('akamai', 'Akamai CDN', 'www.akamaistatus.com'),
@@ -32,6 +34,26 @@ feed('zzoomm', 'Zzoomm network status', 'broadband', 'statuspage', 'https://zzoo
 feed('wessex-internet', 'Wessex Internet network status', 'broadband', 'statuspage', 'https://wessexinternet.statuspage.io/api/v2/incidents.json', 'https://wessexinternet.statuspage.io/', 'Wessex Internet fibre and fixed-wireless areas in South West England', 'Official public Statuspage incidents and area notices. Location names are provider supplied and may cover surrounding areas.')
 feed('gointernet','Go Internet network status','broadband','gointernet','https://status.gointernet.co.uk/status','https://status.gointernet.co.uk/status','Isle of Wight, Isle of Sheppey and UK wholesale networks','Public status-board incidents for fixed wireless, FTTP and wholesale network context. HTML adapter; individual lines are not diagnosed.')
 feed('npg', 'Northern Powergrid', 'electricity', 'npg', 'https://northernpowergrid.opendatasoft.com/api/explore/v2.1/catalog/datasets/live-power-cuts-data/records', 'https://northernpowergrid.opendatasoft.com/explore/dataset/live-power-cuts-data/', 'North East England, Yorkshire and northern Lincolnshire', 'Source coordinates; power loss can interrupt routers and network equipment.')
+feed('chmi-weather', 'CHMI Czech weather warnings', 'environment', 'cap',
+     'https://opendata.chmi.cz/meteorology/weather/alerts/cap/',
+     'https://www.chmi.cz/', 'Czech Republic',
+     'National Czech warning CAP/XML directory. Risk context, not proof of a broadband outage.', ['cz'])
+feed('dwd-weather', 'DWD Germany weather warnings', 'environment', 'cap',
+     'https://opendata.dwd.de/weather/alerts/cap/DISTRICT_EVENT_STAT/',
+     'https://www.dwd.de/EN/weather/warnings/warnings.html', 'Germany',
+     'National German district warning CAP/XML directory. Risk context, not proof of a broadband outage.', ['de'])
+feed('cez-power-portal', 'ČEZ Distribuce outages and planned interruptions', 'electricity', 'portal', None,
+     'https://www.cezdistribuce.cz/nejde-mi-elektrina', 'Czech Republic',
+     'Portal lookup for outages and planned interruptions; no verified public national API yet.', ['cz'])
+feed('egd-power-portal', 'EG.D outages and planned interruptions', 'electricity', 'portal', None,
+     'https://www.egd.cz/portal-distribuce24', 'Czech Republic',
+     'Customer/distribution portal for outages and planned interruptions; no verified public national API yet.', ['cz'])
+feed('pre-power-portal', 'PREdistribuce outages', 'electricity', 'portal', None,
+     'https://www.pre.cz/cs/domacnosti/sluzby-zakaznikum/technicke-sluzby-pre/hlaseni-poruchy/elektrina/',
+     'Czech Republic', 'Prague distribution-area outage route; no verified public national API yet.', ['cz'])
+feed('bnetza-power-interruptions', 'German power interruption data', 'electricity', 'portal', None,
+     'https://www.bundesnetzagentur.de/EN/Areas/Energy/SecurityOfSupply/start.html', 'Germany',
+     'Federal interruption statistics and anonymised reporting, not a verified live national outage feed.', ['de'])
 feed('metoffice', 'Met Office weather warnings', 'environment', 'rss', 'https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK', 'https://weather.metoffice.gov.uk/warnings-and-advice', 'UK', 'Risk context, not proof of a broadband outage. Verify warning validity at source.')
 feed('metoffice-historic', 'Met Office historic weather-warning archive', 'environment', 'portal', None, 'https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service', 'UK, March 2011 onwards', 'The supplied NSWWS Metadata 2026 workbook is bundled for History views. It records original issue date, classification, weather element and named regions; it has no validity period or geometry. The live Met Office API has no historic-warning endpoint.')
 feed('ea', 'Environment Agency flood warnings', 'environment', 'flood', 'https://environment.data.gov.uk/flood-monitoring/id/floods', 'https://check-for-flooding.service.gov.uk/', 'England', 'Environment Agency flood and river level data: Open Government Licence. Risk context, not a confirmed broadband fault.')
