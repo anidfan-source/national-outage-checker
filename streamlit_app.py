@@ -40,6 +40,116 @@ CLOSED = {'resolved','completed','postmortem'}
 NOT_ONGOING = CLOSED | {'scheduled'}
 LONDON = ZoneInfo('Europe/London')
 
+MARKETS = {
+    'uk': {
+        'label': 'United Kingdom',
+        'bounds': (-9.25, 49.4, 2.25, 61.4),
+        'center': (54.5, -3.4),
+        'zoom': 5.2,
+    },
+    'cz': {
+        'label': 'Czech Republic',
+        'bounds': (11.8, 48.4, 19.1, 51.1),
+        'center': (49.8, 15.5),
+        'zoom': 6.0,
+    },
+    'de': {
+        'label': 'Germany',
+        'bounds': (5.5, 47.1, 15.2, 55.2),
+        'center': (51.2, 10.4),
+        'zoom': 5.7,
+    },
+}
+ACTIVE_MARKET = 'uk'
+ACTIVE_LANGUAGE = 'en'
+
+MARKET_LANGUAGES = {
+    'uk': {'en': 'English'},
+    'cz': {'en': 'English', 'cs': 'Čeština'},
+    'de': {'en': 'English', 'de': 'Deutsch'},
+}
+
+TRANSLATIONS = {
+    'en': {
+        'country_market': 'Country / market',
+        'language': 'Language',
+        'locked': 'Feeds and map locked to',
+        'updated': 'Updated',
+    },
+    'cs': {
+        'country_market': 'Země / trh',
+        'language': 'Jazyk',
+        'locked': 'Datové zdroje a mapa jsou uzamčeny pro trh',
+        'updated': 'Aktualizováno',
+    },
+    'de': {
+        'country_market': 'Land / Markt',
+        'language': 'Sprache',
+        'locked': 'Datenquellen und Karte sind auf den Markt beschränkt:',
+        'updated': 'Aktualisiert',
+    },
+}
+
+def translate(key, fallback=None):
+    language = ACTIVE_LANGUAGE if ACTIVE_LANGUAGE in TRANSLATIONS else 'en'
+    return TRANSLATIONS[language].get(key, fallback or TRANSLATIONS['en'].get(key, key))
+
+
+def market_point_in_bounds(point, market=None):
+    market = market or ACTIVE_MARKET
+    try:
+        min_lng, min_lat, max_lng, max_lat = MARKETS[market]['bounds']
+        lat = float(point.get('lat'))
+        lng = float(point.get('lng', point.get('lon')))
+        return min_lat <= lat <= max_lat and min_lng <= lng <= max_lng
+    except (AttributeError, TypeError, ValueError):
+        return False
+
+def market_max_bounds():
+    min_lng, min_lat, max_lng, max_lat = MARKETS[ACTIVE_MARKET]['bounds']
+    return [[min_lng, min_lat], [max_lng, max_lat]]
+
+def market_view_state():
+    config = MARKETS[ACTIVE_MARKET]
+    return pdk.ViewState(
+        latitude=config['center'][0], longitude=config['center'][1],
+        zoom=config['zoom'], min_zoom=4.7, max_zoom=11, pitch=0,
+    )
+
+def source_available_in_market(source, market=None):
+    market = market or ACTIVE_MARKET
+    declared = source.get('markets') or source.get('market')
+    if declared:
+        if isinstance(declared, str):
+            declared = [declared]
+        return market in declared
+    scope = text(source.get('scope'))
+    return market == 'uk' or scope.startswith('global')
+
+def incident_available_in_market(item, market=None):
+    market = market or ACTIVE_MARKET
+    if market == 'uk':
+        return True
+    if item.get('market') == market or item.get('countryCode') == market:
+        return True
+    return any(market_point_in_bounds(point, market) for point in item.get('locationPoints', []))
+
+def market_snapshot(data, market):
+    source_ids = {
+        source['id'] for source in data.get('sources', [])
+        if source_available_in_market(source, market)
+    }
+    sources = [
+        source for source in data.get('sources', [])
+        if source['id'] in source_ids
+    ]
+    incidents = [
+        item for item in data.get('incidents', [])
+        if item.get('sourceId') in source_ids and incident_available_in_market(item, market)
+    ]
+    return {**data, 'sources': sources, 'incidents': incidents, 'market': market}
+
+
 def display_time(value, fallback='not available'):
     """Display stored UTC timestamps as UK civil time (BST in summer, GMT in winter)."""
     if not value:
@@ -305,7 +415,7 @@ def filters(data, page_categories=None):
 def header(data, eyebrow, title, description):
     fresh=sum(s.get('state')=='connected' for s in data['sources'] if s.get('kind')!='portal'); stale=sum(s.get('state')=='stale' for s in data['sources'])
     st.markdown(f'<div class="eyebrow">{eyebrow}</div>',unsafe_allow_html=True); st.title(title); st.caption(description)
-    st.caption(f"Updated {display_time(data.get('updatedAt'))} · {fresh} live feeds connected · {stale} stale source{'s' if stale!=1 else ''}")
+    st.caption(f"{MARKETS[ACTIVE_MARKET]['label']} · {translate('updated')} {display_time(data.get('updatedAt'))} · {fresh} live feeds connected · {stale} stale source{'s' if stale!=1 else ''}")
 
 def exports(records, data, summary):
     payload=report(records,data['sources'],summary,data.get('updatedAt')); a,b,c=st.columns(3)
@@ -395,7 +505,7 @@ def render_map_chart(chart, points, chart_key, selector_key):
 def map_records(records, selection=None):
     points=[{'lat':p['lat'],'lon':p['lng'],'provider':item.get('provider'),'type':p.get('method'),'title':item.get('title'),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0],'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]),
              'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'locationDescription':item.get('locationDescription'),'promoter':item.get('promoter'),'workReferenceNumber':item.get('workReferenceNumber'),'trafficManagementType':item.get('trafficManagementType'),'sourceFields':item.get('sourceFields'),'published':display_time(item.get('date'), 'not supplied'),'raised':display_time(item.get('raisedAt'), 'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'), 'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'), 'not supplied'),'url':item.get('url'),'color':CATEGORY_COLORS.get(item.get('category'),[71,85,105,220])}
-            for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
+            for item in records for p in item.get('locationPoints',[]) if market_point_in_bounds(p)]
     for i,point in enumerate(points): point.update(pointId=i,mapKey='outage_map')
     search_points=[{'lat':selection['lat'],'lon':selection['lng'],'postcode':selection['postcode']}] if selection and selection.get('lat') is not None and selection.get('lng') is not None else []
     if points or search_points:
@@ -409,7 +519,7 @@ def map_records(records, selection=None):
             line_width_min_pixels=3,stroked=True,pickable=True))
         chart=pdk.Deck(
             initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
-            views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],
+            views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':market_max_bounds()})],
             layers=layers,
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
@@ -426,7 +536,7 @@ def impact_heatmap(records):
     points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider'),'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'locationDescription':item.get('locationDescription'),'promoter':item.get('promoter'),'workReferenceNumber':item.get('workReferenceNumber'),'trafficManagementType':item.get('trafficManagementType'),'sourceFields':item.get('sourceFields'),'published':display_time(item.get('date'),'not supplied'),'raised':display_time(item.get('raisedAt'),'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'),'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'),'not supplied'),'url':item.get('url')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     for i,point in enumerate(points): point.update(pointId=i,mapKey='impact_heatmap')
     if not points: st.info('No mapped locations match these filters.'); return
-    chart=pdk.Deck(initial_view_state=pdk.ViewState(latitude=54.5,longitude=-3.4,zoom=5.2,min_zoom=4.7,max_zoom=11,pitch=0),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=3000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=8,get_fill_color='[0, 0, 0, 1]',pickable=True,auto_highlight=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    chart=pdk.Deck(initial_view_state=market_view_state(),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=3000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=8,get_fill_color='[0, 0, 0, 1]',pickable=True,auto_highlight=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
     left,right=st.columns((3,2),gap='large')
     with left: render_map_chart(chart,points,'impact_heatmap','impact_heatmap_record')
     with right: map_insight_picker(points,'impact_heatmap_record')
@@ -521,7 +631,10 @@ def category_view(key,title,description):
 
 def sources_view():
     header(DATA,'Data quality','Sources & connection health','See what is automated, stale or only a provider portal before relying on a result.'); records,summary=filters(DATA)
-    street_manager_health_panel()
+    if ACTIVE_MARKET == 'uk':
+        street_manager_health_panel()
+    else:
+        st.info('Street Manager is a UK source and is hidden for this market.')
     states=Counter(s.get('state','unknown') for s in DATA['sources'])
     for col,state in zip(st.columns(4),('connected','stale','unavailable','portal-only')): col.metric(state.replace('-',' ').title(),states.get(state,0))
     exports(records,DATA,summary)
@@ -698,6 +811,28 @@ configure_cloudflare()
 
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
+
+selected_market = st.sidebar.selectbox(
+    translate('country_market'),
+    options=list(MARKETS),
+    format_func=lambda key: MARKETS[key]['label'],
+    key='market_selector',
+)
+ACTIVE_MARKET = selected_market
+language_options = MARKET_LANGUAGES[ACTIVE_MARKET]
+saved_language = st.session_state.get('market_language', next(iter(language_options)))
+if saved_language not in language_options:
+    saved_language = next(iter(language_options))
+selected_language = st.sidebar.selectbox(
+    translate('language'),
+    options=list(language_options),
+    format_func=lambda key: language_options[key],
+    index=list(language_options).index(saved_language),
+    key='market_language',
+)
+ACTIVE_LANGUAGE = selected_language
+DATA = market_snapshot(DATA, ACTIVE_MARKET)
+st.sidebar.caption(f"{translate('locked')} {MARKETS[ACTIVE_MARKET]['label']}.")
 
 navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')],'Integrate':[st.Page(feeds_howto_view,title='How to connect feeds',icon='🔌')]},position='sidebar')
 navigation.run()
