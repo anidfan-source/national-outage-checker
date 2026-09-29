@@ -381,11 +381,10 @@ def filters(data, page_categories=None):
         mode=st.segmented_control(translate('view_mode'),['Live','History'],default='Live',format_func=lambda key: translate('live') if key=='Live' else translate('history'),selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
     with st.sidebar:
         st.caption('NATIONAL OUTAGE CHECKER'); st.header(translate('explore_incidents'))
-        location_box,location_action=st.columns((4,1),gap='small')
+        location_box,location_action=st.columns((4,1),gap='small',vertical_alignment='bottom')
         with location_box:
             location_input=st.text_input(translate('area_or_location'),placeholder='Country, region, city or local area',help='Search by country, region, city, postal code or local authority.',key='location_query_input',label_visibility='visible')
         with location_action:
-            st.write(' ')
             search_location=st.button(translate('search'),key='location_search',use_container_width=True,type='primary')
         if search_location:
             st.session_state['location_query']=location_input.strip()
@@ -850,7 +849,6 @@ if saved_language not in language_options:
     saved_language = next(iter(language_options))
 ACTIVE_LANGUAGE = saved_language
 with country_columns[3]:
-    st.markdown(f"**{translate('language')}**")
     language_columns = st.columns(len(language_options), gap='small')
     for language_column, language_key in zip(language_columns, language_options):
         with language_column:
