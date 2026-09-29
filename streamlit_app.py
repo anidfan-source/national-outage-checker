@@ -603,6 +603,7 @@ def correlated_view():
     header(DATA,translate('overview'),translate('overview_title').format(market=MARKETS[ACTIVE_MARKET]['label']),translate('overview_description')); records,summary=filters(DATA)
     direct=sum(item.get('evidenceType')=='provider-report' or item.get('category')=='broadband' for item in records); risks=sum(item.get('category') in ('electricity','environment') for item in records); signals=sum(item.get('evidenceType') in ('network-signal','probe-evidence') for item in records)
     for col,label,value in zip(st.columns(4),(translate('matching_evidence'),translate('provider_reports'),translate('power_weather_context'),translate('network_signals_metric')),(len(records),direct,risks,signals)):
+        col.metric(label,value)
     st.subheader(translate('what_may_be_related')); groups=defaultdict(list)
     for item in records:
         for area in (item.get('postcodeAreas') or [item.get('region') or 'Location not supplied'])[:3]: groups[area].append(item)
