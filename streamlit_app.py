@@ -15,7 +15,7 @@ from historic_weather import fetch_historic_weather_warnings
 from locations import distance_km, lookup_postcode
 from reporting import LIMITATIONS, csv_bytes, report, source_health_csv_bytes
 
-st.set_page_config(page_title='UK Outage Viewer', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
+st.set_page_config(page_title='National Outage Checker', page_icon='⚡', layout='wide', initial_sidebar_state='expanded')
 st.markdown('''<style>
 [data-testid="stMetric"] {background:#f7f9fc;border:1px solid #e4e9f1;border-radius:14px;padding:12px}
 [data-testid="stMetric"] [data-testid="stMetricLabel"], [data-testid="stMetric"] [data-testid="stMetricValue"] {color:#101828!important}
@@ -43,18 +43,21 @@ LONDON = ZoneInfo('Europe/London')
 MARKETS = {
     'uk': {
         'label': 'United Kingdom',
+        'flag': '🇬🇧',
         'bounds': (-9.25, 49.4, 2.25, 61.4),
         'center': (54.5, -3.4),
         'zoom': 5.2,
     },
     'cz': {
         'label': 'Czech Republic',
+        'flag': '🇨🇿',
         'bounds': (11.8, 48.4, 19.1, 51.1),
         'center': (49.8, 15.5),
         'zoom': 6.0,
     },
     'de': {
         'label': 'Germany',
+        'flag': '🇩🇪',
         'bounds': (5.5, 47.1, 15.2, 55.2),
         'center': (51.2, 10.4),
         'zoom': 5.7,
@@ -812,27 +815,39 @@ configure_cloudflare()
 try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
 
-selected_market = st.sidebar.selectbox(
-    translate('country_market'),
-    options=list(MARKETS),
-    format_func=lambda key: MARKETS[key]['label'],
-    key='market_selector',
-)
+selected_market = st.session_state.get('market_selector', 'uk')
+if selected_market not in MARKETS:
+    selected_market = 'uk'
 ACTIVE_MARKET = selected_market
-language_options = MARKET_LANGUAGES[ACTIVE_MARKET]
-saved_language = st.session_state.get('market_language', next(iter(language_options)))
-if saved_language not in language_options:
-    saved_language = next(iter(language_options))
-selected_language = st.sidebar.selectbox(
-    translate('language'),
-    options=list(language_options),
-    format_func=lambda key: language_options[key],
-    index=list(language_options).index(saved_language),
-    key='market_language',
-)
+
+st.markdown(f'<div class="eyebrow">{translate("country_market")}</div>', unsafe_allow_html=True)
+country_columns = st.columns([1, 1, 1, 1.45], gap='small')
+for column, (market_key, market_config) in zip(country_columns[:3], MARKETS.items()):
+    with column:
+        is_active = market_key == ACTIVE_MARKET
+        if st.button(
+            f"{market_config['flag']}  {market_config['label']}",
+            key=f"market_button_{market_key}",
+            type='primary' if is_active else 'secondary',
+            use_container_width=True,
+        ):
+            st.session_state['market_selector'] = market_key
+            st.rerun()
+with country_columns[3]:
+    language_options = MARKET_LANGUAGES[ACTIVE_MARKET]
+    saved_language = st.session_state.get('market_language', next(iter(language_options)))
+    if saved_language not in language_options:
+        saved_language = next(iter(language_options))
+    selected_language = st.selectbox(
+        translate('language'),
+        options=list(language_options),
+        format_func=lambda key: language_options[key],
+        index=list(language_options).index(saved_language),
+        key='market_language',
+    )
 ACTIVE_LANGUAGE = selected_language
+st.caption(f"{translate('locked')} {MARKETS[ACTIVE_MARKET]['label']}.")
 DATA = market_snapshot(DATA, ACTIVE_MARKET)
-st.sidebar.caption(f"{translate('locked')} {MARKETS[ACTIVE_MARKET]['label']}.")
 
 navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')],'Integrate':[st.Page(feeds_howto_view,title='How to connect feeds',icon='🔌')]},position='sidebar')
 navigation.run()
