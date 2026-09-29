@@ -398,7 +398,7 @@ def filters(data, page_categories=None):
         st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
         location_box,location_action=st.columns((4,1),gap='small')
         with location_box:
-            location_input=st.text_input('Area or location',placeholder='PA, PA28, Glasgow or Aberdeenshire',help='Search by postcode area, postcode district, full postcode, town, city, county or local authority.',key='location_query_input',label_visibility='visible')
+            location_input=st.text_input('Area or location',placeholder='Country, region, city or local area',help='Search by country, region, city, postal code or local authority.',key='location_query_input',label_visibility='visible')
         with location_action:
             st.write(' ')
             search_location=st.button('Search',key='location_search',use_container_width=True,type='primary')
@@ -408,7 +408,7 @@ def filters(data, page_categories=None):
         location_query=st.session_state.get('location_query','')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
-        query=st.text_input('Find a provider or issue',placeholder='Power cut, Zen, rain…')
+        query=st.text_input('Find a provider or issue',placeholder='Outage, provider, weather or other issue…')
         days=st.slider('History days',1,365,30,disabled=mode=='Live',help='Choose History above to search earlier notices.')
         available=page_categories or list(CATEGORY_LABELS)
         categories=st.multiselect('Evidence types',available,default=available,format_func=CATEGORY_LABELS.get)
@@ -533,7 +533,7 @@ def map_records(records, selection=None):
     if points or search_points:
         legend='&nbsp;&nbsp;'.join(f'<span style="color:rgb({color[0]},{color[1]},{color[2]});font-weight:700">●</span> {CATEGORY_LABELS[key]}' for key,color in CATEGORY_COLORS.items())
         st.markdown(f'<div style="font-size:.85rem;margin:.2rem 0 .6rem">{legend}</div>',unsafe_allow_html=True)
-        centre=search_points[0] if search_points else {'lat':54.5,'lon':-3.4}
+        centre=search_points[0] if search_points else {'lat':MARKETS[ACTIVE_MARKET]['center'][0],'lon':MARKETS[ACTIVE_MARKET]['center'][1]}
         layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=5000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=9,
                               get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True,auto_highlight=True)]
         if search_points: layers.append(pdk.Layer('ScatterplotLayer',data=search_points,get_position='[lon, lat]',get_radius=700,
@@ -615,7 +615,7 @@ def incident_list(records, title='Published evidence'):
             if item.get('url'): st.link_button('Open source',item['url'])
 
 def correlated_view():
-    header(DATA,'Overview','UK Outage Viewer','Start with a place, then compare direct provider notices with power, weather and passive network evidence.'); records,summary=filters(DATA)
+    header(DATA,'Overview',f"{MARKETS[ACTIVE_MARKET]['label']} outage viewer",'Start with a place, then compare provider notices with power, weather and passive network evidence.'); records,summary=filters(DATA)
     direct=sum(item.get('evidenceType')=='provider-report' or item.get('category')=='broadband' for item in records); risks=sum(item.get('category') in ('electricity','environment') for item in records); signals=sum(item.get('evidenceType') in ('network-signal','probe-evidence') for item in records)
     for col,label,value in zip(st.columns(4),('Matching evidence','Provider reports','Power & weather context','Network signals'),(len(records),direct,risks,signals)): col.metric(label,value)
     st.subheader('What may be related'); groups=defaultdict(list)
@@ -625,7 +625,7 @@ def correlated_view():
     if overlaps:
         for area,items in sorted(overlaps,key=lambda x:len(x[1]),reverse=True)[:6]: st.info(f"**{area_label(area)}** · {len(items)} matching notices across {', '.join(sorted({CATEGORY_LABELS.get(x.get('category'),x.get('category')) for x in items}))}. Review source records before attributing a cause.")
     else: st.caption('No multi-source geographic overlap is visible in the selected records.')
-    st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postcode centroids, telephone and probe locations are approximate. Select a marker for details.')
+    st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postal-code, telephone and probe locations are approximate. Select a marker for details.')
     map_records(records,summary.get('resolvedLocation'))
     trend=Counter((x.get('date') or '')[:10] for x in records if x.get('date')); st.subheader('Notice trend')
     if trend: st.bar_chart({day:trend[day] for day in sorted(trend)})
