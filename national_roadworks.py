@@ -44,7 +44,7 @@ def _srwr_zip_url():
     if not url: raise ValueError("SRWR disruptions export download URL was not returned")
     return url
 
-def _compact_source_fields(row,max_fields=40,max_chars=12000):
+def _compact_source_fields(row,max_fields=24,max_chars=6000):
     values=[]
     for key,value in row.items():
         cleaned=_clean(value)
