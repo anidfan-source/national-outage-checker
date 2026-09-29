@@ -1,11 +1,13 @@
 """Roadworks collectors for Scotland (SRWR) and Wales (Traffic Wales)."""
-import csv, hashlib, html, io, re, urllib.parse, urllib.request, xml.etree.ElementTree as ET, zipfile
+import csv, hashlib, html, io, re, time, urllib.parse, urllib.request, xml.etree.ElementTree as ET, zipfile
 
 TELECOM_TERMS=(
     "telecom","broadband","fibre","fiber","openreach","bt","virgin media","cityfibre",
     "vodafone","hyperoptic","gigaclear","community fibre","talktalk","telefonica","o2",
 )
 SRWR_PAGE="https://downloads.srwr.scot/disruptions-export"
+SRWR_CACHE_SECONDS=900
+SRWR_CACHE={"expires":0.0,"records":None,"details":None}
 
 def _clean(value):
     return re.sub(r"\s+"," ",html.unescape(re.sub(r"<[^>]+>"," ",str(value or "")))).strip()
@@ -42,7 +44,26 @@ def _srwr_zip_url():
     if not url: raise ValueError("SRWR disruptions export download URL was not returned")
     return url
 
+def _compact_source_fields(row,max_fields=40,max_chars=12000):
+    values=[]
+    for key,value in row.items():
+        cleaned=_clean(value)
+        if not cleaned: continue
+        label=_clean(key)
+        priority=bool(re.search(r"promoter|reference|description|location|street|town|status|start|end|date|permit|traffic|work|activity|coordinate|latitude|longitude|usrn",label,re.I))
+        values.append((not priority,label,cleaned))
+    values.sort(key=lambda item:(item[0],item[1].casefold()))
+    result={}; used=0
+    for _,label,value in values:
+        if len(result)>=max_fields or used+len(value)>max_chars: break
+        result[label]=value[:4000]
+        used+=len(value)
+    return result
+
 def collect_srwr(source,make_event,parse_date):
+    cached=SRWR_CACHE
+    if cached["records"] is not None and cached["expires"]>time.monotonic():
+        return cached["records"],cached["details"]
     raw=_download(_srwr_zip_url(),"application/zip",80_000_000)
     records=[]; scanned=0
     csv.field_size_limit(10_000_000)
@@ -65,18 +86,18 @@ def collect_srwr(source,make_event,parse_date):
                     desc=_pick(row,"description","works description","work description","activity description") or ""
                     item=make_event(source,ref,f"Telecom road works · {promoter}",start,status,
                         ". ".join(x for x in (street,town,desc) if x),source["website"],region=town or street or "Scotland")
-                    source_fields={}
-                    for key,value in row.items():
-                        cleaned=_clean(value)
-                        if cleaned:
-                            source_fields[_clean(key)] = cleaned[:4000]
+                    source_fields=_compact_source_fields(row)
                     item.update(evidenceType="roadworks-context",promoter=promoter,workReferenceNumber=ref,
                         locationDescription=" · ".join(x for x in (street,town) if x),
                         workDescription=desc, proposedStartAt=start,proposedEndAt=end,
                         sourceFields=source_fields,
                         attribution="Scottish Road Works Register (SRWR)")
                     records.append(item)
-    return records,{"coverage":"Scotland SRWR Disruptions Export; telecom-related current road works only.","scannedCount":scanned}
+    details={"coverage":"Scotland SRWR Disruptions Export; telecom-related current road works only.","scannedCount":scanned,"retainedCount":len(records),"cacheSeconds":SRWR_CACHE_SECONDS}
+    cached["records"]=records
+    cached["details"]=details
+    cached["expires"]=time.monotonic()+SRWR_CACHE_SECONDS
+    return records,details
 
 def collect_traffic_wales(source,make_event,parse_date):
     raw=_download(source["url"],"application/rss+xml, application/xml, text/xml")
