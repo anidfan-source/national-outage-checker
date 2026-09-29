@@ -73,24 +73,9 @@ MARKET_LANGUAGES = {
 }
 
 TRANSLATIONS = {
-    'en': {
-        'country_market': 'Country / market',
-        'language': 'Language',
-        'locked': 'Feeds and map locked to',
-        'updated': 'Updated',
-    },
-    'cs': {
-        'country_market': 'Země / trh',
-        'language': 'Jazyk',
-        'locked': 'Datové zdroje a mapa jsou uzamčeny pro trh',
-        'updated': 'Aktualizováno',
-    },
-    'de': {
-        'country_market': 'Land / Markt',
-        'language': 'Sprache',
-        'locked': 'Datenquellen und Karte sind auf den Markt beschränkt:',
-        'updated': 'Aktualisiert',
-    },
+    'en': {'country_market':'Country / market','language':'Language','locked':'Feeds and map locked to','updated':'Updated','view_mode':'View mode','overview':'Overview','overview_title':'{market} outage viewer','overview_description':'Start with a place, then compare provider notices with power, weather and passive network evidence.','show_incidents':'SHOW INCIDENTS','live':'Live','history':'History','explore_incidents':'Explore incidents','area_or_location':'Area or location','search':'Search','find_provider_issue':'Find a provider or issue','history_days':'History days','evidence_types':'Evidence types','provider':'Provider','all_providers':'All providers','refresh_feeds':'Refresh feeds','match_disclaimer':'A match is related published evidence, not a diagnosis of an individual household line.','correlated_view':'Correlated view','trends':'Trends','broadband':'Broadband','power':'Power','weather_flood':'Weather & flood','roadworks':'Street Manager / Roadworks','network_signals':'Network signals','services':'Services','source_health':'Source health','how_to_connect_feeds':'How to connect feeds','matching_evidence':'Matching evidence','provider_reports':'Provider reports','power_weather_context':'Power & weather context','network_signals_metric':'Network signals','what_may_be_related':'What may be related','map_available_locations':'Map of available locations','map_caption':'Source coordinates are preferred. Postal-code, telephone and probe locations are approximate. Select a marker for details.','notice_trend':'Notice trend','all_matching_evidence':'All matching evidence','no_overlap':'No multi-source geographic overlap is visible in the selected records.'},
+    'cs': {'country_market':'Země / trh','language':'Jazyk','locked':'Datové zdroje a mapa jsou uzamčeny pro trh','updated':'Aktualizováno','view_mode':'Režim zobrazení','overview':'Přehled','overview_title':'Přehled výpadků – {market}','overview_description':'Začněte místem a porovnejte oznámení poskytovatelů s informacemi o elektřině, počasí a síťových signálech.','show_incidents':'ZOBRAZIT INCIDENTY','live':'Aktuální','history':'Historie','explore_incidents':'Prozkoumat incidenty','area_or_location':'Oblast nebo místo','search':'Hledat','find_provider_issue':'Najít poskytovatele nebo problém','history_days':'Počet dnů historie','evidence_types':'Typy důkazů','provider':'Poskytovatel','all_providers':'Všichni poskytovatelé','refresh_feeds':'Obnovit zdroje','match_disclaimer':'Shoda představuje související zveřejněné informace, nikoli diagnózu konkrétní linky.','correlated_view':'Souhrnný pohled','trends':'Trendy','broadband':'Širokopásmové připojení','power':'Elektřina','weather_flood':'Počasí a povodně','roadworks':'Silniční práce','network_signals':'Síťové signály','services':'Služby','source_health':'Stav zdrojů','how_to_connect_feeds':'Jak připojit zdroje','matching_evidence':'Odpovídající informace','provider_reports':'Hlášení poskytovatelů','power_weather_context':'Kontext elektřiny a počasí','network_signals_metric':'Síťové signály','what_may_be_related':'Co může souviset','map_available_locations':'Mapa dostupných míst','map_caption':'Upřednostňujeme souřadnice zdroje. Poštovní, telefonní a sondová místa jsou přibližná. Vyberte bod pro podrobnosti.','notice_trend':'Trend oznámení','all_matching_evidence':'Všechny odpovídající informace','no_overlap':'Ve vybraných záznamech není viditelný geografický překryv více zdrojů.'},
+    'de': {'country_market':'Land / Markt','language':'Sprache','locked':'Datenquellen und Karte sind auf den Markt beschränkt:','updated':'Aktualisiert','view_mode':'Ansicht','overview':'Übersicht','overview_title':'Störungsübersicht für {market}','overview_description':'Wählen Sie einen Ort und vergleichen Sie Anbieterhinweise mit Strom-, Wetter- und passiven Netzwerksignalen.','show_incidents':'STÖRUNGEN ANZEIGEN','live':'Aktuell','history':'Verlauf','explore_incidents':'Störungen durchsuchen','area_or_location':'Gebiet oder Ort','search':'Suchen','find_provider_issue':'Anbieter oder Problem finden','history_days':'Tage im Verlauf','evidence_types':'Evidenztypen','provider':'Anbieter','all_providers':'Alle Anbieter','refresh_feeds':'Datenquellen aktualisieren','match_disclaimer':'Ein Treffer ist ein veröffentlichter Hinweis und keine Diagnose einer einzelnen Anschlussleitung.','correlated_view':'Zusammenfassung','trends':'Trends','broadband':'Breitband','power':'Strom','weather_flood':'Wetter und Hochwasser','roadworks':'Straßenarbeiten','network_signals':'Netzwerksignale','services':'Dienste','source_health':'Quellenstatus','how_to_connect_feeds':'Datenquellen verbinden','matching_evidence':'Passende Hinweise','provider_reports':'Anbieterberichte','power_weather_context':'Strom- und Wetterkontext','network_signals_metric':'Netzwerksignale','what_may_be_related':'Mögliche Zusammenhänge','map_available_locations':'Karte der verfügbaren Orte','map_caption':'Quellkoordinaten werden bevorzugt. Postleitzahl-, Telefon- und Sondenstandorte sind ungefähr. Wählen Sie einen Marker für Details.','notice_trend':'Hinweisverlauf','all_matching_evidence':'Alle passenden Hinweise','no_overlap':'In den ausgewählten Datensätzen ist keine geografische Überschneidung mehrerer Quellen sichtbar.'},
 }
 
 def translate(key, fallback=None):
@@ -392,29 +377,29 @@ def filters(data, page_categories=None):
         st.session_state['location_query']=pending_area
     _,view_control,_=st.columns((1,2,1))
     with view_control:
-        st.caption('SHOW INCIDENTS')
-        mode=st.segmented_control('View mode',['Live','History'],default='Live',selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
+        st.caption(translate('show_incidents'))
+        mode=st.segmented_control(translate('view_mode'),['Live','History'],default='Live',format_func=lambda key: translate('live') if key=='Live' else translate('history'),selection_mode='single',key='global_view_mode',label_visibility='collapsed') or 'Live'
     with st.sidebar:
-        st.caption('NATIONAL OUTAGE CHECKER'); st.header('Explore incidents')
+        st.caption('NATIONAL OUTAGE CHECKER'); st.header(translate('explore_incidents'))
         location_box,location_action=st.columns((4,1),gap='small')
         with location_box:
-            location_input=st.text_input('Area or location',placeholder='Country, region, city or local area',help='Search by country, region, city, postal code or local authority.',key='location_query_input',label_visibility='visible')
+            location_input=st.text_input(translate('area_or_location'),placeholder='Country, region, city or local area',help='Search by country, region, city, postal code or local authority.',key='location_query_input',label_visibility='visible')
         with location_action:
             st.write(' ')
-            search_location=st.button('Search',key='location_search',use_container_width=True,type='primary')
+            search_location=st.button(translate('search'),key='location_search',use_container_width=True,type='primary')
         if search_location:
             st.session_state['location_query']=location_input.strip()
             st.rerun()
         location_query=st.session_state.get('location_query','')
         location,message=selected_location(location_query,data['locationReference'])
         if message: st.caption(message)
-        query=st.text_input('Find a provider or issue',placeholder='Outage, provider, weather or other issue…')
-        days=st.slider('History days',1,365,30,disabled=mode=='Live',help='Choose History above to search earlier notices.')
+        query=st.text_input(translate('find_provider_issue'),placeholder='Outage, provider, weather or other issue…')
+        days=st.slider(translate('history_days'),1,365,30,disabled=mode=='Live',help='Choose History above to search earlier notices.')
         available=page_categories or list(CATEGORY_LABELS)
-        categories=st.multiselect('Evidence types',available,default=available,format_func=CATEGORY_LABELS.get)
-        provider=st.selectbox('Provider',['All providers']+list(names),format_func=lambda x:names.get(x,x))
-        if st.button('Refresh feeds',use_container_width=True,type='primary'): load_dashboard.clear(); st.rerun()
-        st.divider(); st.caption('A match is related published evidence, not a diagnosis of an individual household line.')
+        categories=st.multiselect(translate('evidence_types'),available,default=available,format_func=CATEGORY_LABELS.get)
+        provider=st.selectbox(translate('provider'),['All providers']+list(names),format_func=lambda x:translate('all_providers') if x=='All providers' else names.get(x,x))
+        if st.button(translate('refresh_feeds'),use_container_width=True,type='primary'): load_dashboard.clear(); st.rerun()
+        st.divider(); st.caption(translate('match_disclaimer'))
     now=datetime.now(timezone.utc); since=now if mode=='Live' else now.replace(hour=0,minute=0,second=0,microsecond=0)-timedelta(days=days-1)
     incident_data=data
     if mode=='History' and 'environment' in categories:
@@ -615,23 +600,23 @@ def incident_list(records, title='Published evidence'):
             if item.get('url'): st.link_button('Open source',item['url'])
 
 def correlated_view():
-    header(DATA,'Overview',f"{MARKETS[ACTIVE_MARKET]['label']} outage viewer",'Start with a place, then compare provider notices with power, weather and passive network evidence.'); records,summary=filters(DATA)
+    header(DATA,translate('overview'),translate('overview_title').format(market=MARKETS[ACTIVE_MARKET]['label']),translate('overview_description')); records,summary=filters(DATA)
     direct=sum(item.get('evidenceType')=='provider-report' or item.get('category')=='broadband' for item in records); risks=sum(item.get('category') in ('electricity','environment') for item in records); signals=sum(item.get('evidenceType') in ('network-signal','probe-evidence') for item in records)
-    for col,label,value in zip(st.columns(4),('Matching evidence','Provider reports','Power & weather context','Network signals'),(len(records),direct,risks,signals)): col.metric(label,value)
-    st.subheader('What may be related'); groups=defaultdict(list)
+    for col,label,value in zip(st.columns(4),(translate('matching_evidence'),translate('provider_reports'),translate('power_weather_context'),translate('network_signals_metric')),(len(records),direct,risks,signals)):
+    st.subheader(translate('what_may_be_related')); groups=defaultdict(list)
     for item in records:
         for area in (item.get('postcodeAreas') or [item.get('region') or 'Location not supplied'])[:3]: groups[area].append(item)
     overlaps=[(area,items) for area,items in groups.items() if len({x.get('category') for x in items})>1 or len({x.get('provider') for x in items})>1]
     if overlaps:
         for area,items in sorted(overlaps,key=lambda x:len(x[1]),reverse=True)[:6]: st.info(f"**{area_label(area)}** · {len(items)} matching notices across {', '.join(sorted({CATEGORY_LABELS.get(x.get('category'),x.get('category')) for x in items}))}. Review source records before attributing a cause.")
-    else: st.caption('No multi-source geographic overlap is visible in the selected records.')
-    st.subheader('Map of available locations'); st.caption('Source coordinates are preferred. Postal-code, telephone and probe locations are approximate. Select a marker for details.')
+    else: st.caption(translate('no_overlap'))
+    st.subheader(translate('map_available_locations')); st.caption(translate('map_caption'))
     map_records(records,summary.get('resolvedLocation'))
-    trend=Counter((x.get('date') or '')[:10] for x in records if x.get('date')); st.subheader('Notice trend')
+    trend=Counter((x.get('date') or '')[:10] for x in records if x.get('date')); st.subheader(translate('notice_trend'))
     if trend: st.bar_chart({day:trend[day] for day in sorted(trend)})
     else: st.caption('No dated records in this selection.')
     exports(records,DATA,summary)
-    incident_list(records,'All matching evidence')
+    incident_list(records,translate('all_matching_evidence'))
 
 def trends_view():
     header(DATA,'Area trends','Impact by area','Concentration of matching published evidence, not verified household impact.')
@@ -858,21 +843,21 @@ for column, (market_key, market_config) in zip(country_columns[:3], MARKETS.item
         ):
             st.session_state['market_selector'] = market_key
             st.rerun()
+language_options = MARKET_LANGUAGES[ACTIVE_MARKET]
+saved_language = st.session_state.get('market_language', next(iter(language_options)))
+if saved_language not in language_options:
+    saved_language = next(iter(language_options))
+ACTIVE_LANGUAGE = saved_language
 with country_columns[3]:
-    language_options = MARKET_LANGUAGES[ACTIVE_MARKET]
-    saved_language = st.session_state.get('market_language', next(iter(language_options)))
-    if saved_language not in language_options:
-        saved_language = next(iter(language_options))
-    selected_language = st.selectbox(
-        translate('language'),
-        options=list(language_options),
-        format_func=lambda key: language_options[key],
-        index=list(language_options).index(saved_language),
-        key='market_language',
-    )
-ACTIVE_LANGUAGE = selected_language
+    st.markdown(f"**{translate('language')}**")
+    language_columns = st.columns(len(language_options), gap='small')
+    for language_column, language_key in zip(language_columns, language_options):
+        with language_column:
+            if st.button(language_options[language_key],key=f"language_button_{language_key}",type='primary' if language_key == ACTIVE_LANGUAGE else 'secondary',use_container_width=True):
+                st.session_state['market_language'] = language_key
+                st.rerun()
 st.caption(f"{translate('locked')} {MARKETS[ACTIVE_MARKET]['label']}.")
 DATA = market_snapshot(DATA, ACTIVE_MARKET)
 
-navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')],'Integrate':[st.Page(feeds_howto_view,title='How to connect feeds',icon='🔌')]},position='sidebar')
+navigation=st.navigation({'Explore':[st.Page(correlated_view,title=translate('correlated_view'),icon='🔎',default=True),st.Page(trends_view,title=translate('trends'),icon='🔥'),st.Page(broadband_view,title=translate('broadband'),icon='📶'),st.Page(power_view,title=translate('power'),icon='⚡'),st.Page(weather_view,title=translate('weather_flood'),icon='🌦️'),st.Page(roadworks_view,title=translate('roadworks'),icon='🚧'),st.Page(routing_view,title=translate('network_signals'),icon='🌐'),st.Page(services_view,title=translate('services'),icon='☁️')],'Trust':[st.Page(sources_view,title=translate('source_health'),icon='📊')],'Integrate':[st.Page(feeds_howto_view,title=translate('how_to_connect_feeds'),icon='🔌')]},position='sidebar')
 navigation.run()
