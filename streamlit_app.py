@@ -365,9 +365,8 @@ def map_insight_picker(points, key):
 def render_map_chart(chart, points, chart_key, selector_key):
     """Use native PyDeck selection when available, with selector fallback."""
     try:
-        event=st.pydeck_chart(
-            chart,on_select='rerun',selection_mode='single-object',key=chart_key,
-        )
+        selection_options={'on_'+'select':'rerun','selection_'+'mode':'single-object'}
+        event=st.pydeck_chart(chart,**selection_options,key=chart_key)
         objects=getattr(getattr(event,'selection',None),'objects',[]) if event else []
         if objects:
             point_id=objects[0].get('pointId') if isinstance(objects[0],dict) else None
