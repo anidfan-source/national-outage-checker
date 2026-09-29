@@ -29,6 +29,7 @@ from national_roadworks import collect_srwr, collect_traffic_wales
 ROOT = Path(__file__).resolve().parent
 DB = ROOT / 'data' / 'outages.sqlite3'
 INTERVAL = 300
+POWER_HISTORY_DAYS = max(1, int(os.environ.get('POWER_HISTORY_DAYS', '7')))
 LOCK = threading.Lock()
 STATE = {'sources': [], 'updatedAt': None, 'refreshing': True}
 SNAPSHOT_CACHE = {'key': None, 'payload': None}
@@ -175,6 +176,43 @@ def cap_latest_url(source):
         raise ValueError('No CAP/XML or CAP ZIP files found in warning directory')
     return max(candidates, key=lambda item: item[0])[1]
 
+def recent_power_records(records):
+    """Keep electricity evidence bounded to the configured recent window."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=POWER_HISTORY_DAYS)
+    result = []
+    for record in records:
+        value = record.get('date')
+        if not value:
+            continue
+        try:
+            observed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except (TypeError, ValueError):
+            continue
+        if observed >= cutoff:
+            result.append(record)
+    return result
+
+def collect_smard(source):
+    """Read only the newest seven-day SMARD load block."""
+    base = source['url'].rstrip('/')
+    filter_id, region, resolution = '410', 'DE', 'quarterhour'
+    index = json.loads(fetch(f'{base}/{filter_id}/{region}/index_{resolution}.json'))
+    cutoff_ms = int((datetime.now(timezone.utc) - timedelta(days=POWER_HISTORY_DAYS)).timestamp() * 1000)
+    timestamps = [value for value in index.get('timestamps', []) if value >= cutoff_ms]
+    if not timestamps:
+        return []
+    timestamp = max(timestamps)
+    payload = json.loads(fetch(f'{base}/{filter_id}/{region}/{filter_id}_{region}_{resolution}_{timestamp}.json'))
+    values = [(row[0], row[1]) for row in payload.get('series', [])
+              if isinstance(row, list) and len(row) == 2 and row[0] >= cutoff_ms and row[1] is not None]
+    if not values:
+        return []
+    observed_ms, load_mw = max(values, key=lambda item: item[0])
+    observed = datetime.fromtimestamp(observed_ms / 1000, timezone.utc).isoformat()
+    return [event(source, f'load:{observed_ms}', 'Germany latest grid load', observed, 'notice',
+                  f'Latest SMARD total grid load: {float(load_mw):,.2f} MW. National grid context only; it does not confirm a local power cut.',
+                  source['website'], region=source['scope'])]
+
 def parse(source, raw):
     kind = source['kind']
     if kind == 'cap':
@@ -208,6 +246,28 @@ def parse(source, raw):
             result.append(event(source, key, title, field(item, 'pubDate', 'published', 'updated', 'date'),
                                 'notice', description, url, region=region))
         return result
+    if kind in ('html-health', 'html-power'):
+        text = html.unescape(re.sub('<[^>]+>', ' ', raw.decode('utf-8', 'replace'))).strip()
+        if kind == 'html-health':
+            if not text:
+                raise ValueError('Power provider page was empty')
+            return []
+        no_outage = re.search(r'(?:keine|no)\s+(?:aktuellen?\s+)?St(?:ö|oe)rungsmeldungen', text, re.I)
+        if no_outage:
+            return []
+        excerpt = re.search(r'.{0,220}(?:St(?:ö|oe)rung|Ausfall).{0,500}', text, re.I)
+        return [event(source, 'current-status', 'Current Stromnetz Berlin outage status', now(), 'reported',
+                      excerpt.group(0) if excerpt else text[:1000], source['website'], region=source['scope'])]
+    if kind == 'ote-market':
+        text = raw.decode('utf-8', 'replace')
+        title = re.search(r'Day-Ahead Market CZ Results\s*-\s*([^<]+)', text, re.I)
+        base_load = re.search(r'BASE LOAD.*?<td[^>]*>\s*([0-9., ]+)', text, re.I | re.S)
+        if not title or not base_load:
+            raise ValueError('OTE day-ahead base-load indicator not found')
+        value = ' '.join(base_load.group(1).split())
+        return [event(source, 'base-load:' + title.group(1).strip(), 'Czech day-ahead base-load indicator', now(), 'notice',
+                      f'OTE day-ahead base-load indicator: {value} CZK/MWh. National market context only; it does not confirm a local power cut.',
+                      source['website'], region=source['scope'])]
     data = json.loads(raw)
     if kind == 'statuspage':
         if not isinstance(data.get('incidents'), list):
@@ -289,14 +349,18 @@ def collect(source):
             health.update(details)
         elif source['kind'] == 'npg':
             rows = []
+            since = (datetime.now(timezone.utc) - timedelta(days=POWER_HISTORY_DAYS)).isoformat()
             for offset in range(0, 10000, 100):
-                data = json.loads(fetch(source['url'] + f'?limit=100&offset={offset}'))
+                query = urllib.parse.urlencode({'limit': 100, 'offset': offset, 'where': f"loggedtime >= '{since}'"})
+                data = json.loads(fetch(source['url'] + '?' + query))
                 rows.extend(data['results'])
                 if len(rows) >= data['total_count']:
                     break
             else:
                 raise ValueError('Power feed exceeds pagination limit; refusing partial snapshot')
             records = parse(source, json.dumps({'results': rows}))
+        elif source['kind'] == 'smard':
+            records = collect_smard(source)
         elif source['kind'] == 'cap':
             cap_url = cap_latest_url(source)
             payload = fetch(cap_url)
@@ -320,6 +384,8 @@ def collect(source):
             records = list({item['id']: item for item in records + active}.values())
         else:
             records = parse(source, fetch(source['url']))
+        if source['category'] == 'electricity':
+            records = recent_power_records(records)
         health.update(state='stale' if health.get('dataStale') else 'connected', count=len(records), lastSuccess=now())
         return health, records
     except Exception as exc:
@@ -359,6 +425,13 @@ def refresh():
                 conn.execute('INSERT INTO incidents VALUES (?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET source=excluded.source, current=excluded.current, body=excluded.body',
                              (item['id'], health['id'], item['observedAt'], 1, json.dumps(item)))
         conn.execute('DELETE FROM incidents WHERE seen < ?', ((datetime.now(timezone.utc) - timedelta(days=366)).isoformat(),))
+        power_ids = [source['id'] for source in SOURCES if source['category'] == 'electricity']
+        if power_ids:
+            placeholders = ','.join('?' for _ in power_ids)
+            conn.execute(
+                f'DELETE FROM incidents WHERE source IN ({placeholders}) AND seen < ?',
+                [*power_ids, (datetime.now(timezone.utc) - timedelta(days=POWER_HISTORY_DAYS)).isoformat()],
+            )
     with LOCK:
         STATE = dict(sources=[h for h, _ in results], updatedAt=now(), refreshing=False)
         SNAPSHOT_CACHE['key'] = None
@@ -432,4 +505,3 @@ if __name__ == '__main__':
     threading.Thread(target=worker, daemon=True).start()
     print(f'UK Outage Viewer: http://localhost:{port}', flush=True)
     httpd.serve_forever()
-

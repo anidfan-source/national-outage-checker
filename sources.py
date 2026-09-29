@@ -54,6 +54,29 @@ feed('pre-power-portal', 'PREdistribuce outages', 'electricity', 'portal', None,
 feed('bnetza-power-interruptions', 'German power interruption data', 'electricity', 'portal', None,
      'https://www.bundesnetzagentur.de/EN/Areas/Energy/SecurityOfSupply/start.html', 'Germany',
      'Federal interruption statistics and anonymised reporting, not a verified live national outage feed.', ['de'])
+feed('cez-power-page', 'ČEZ Distribuce public outage checker', 'electricity', 'html-health',
+     'https://www.cezdistribuce.cz/nejde-mi-elektrina',
+     'https://www.cezdistribuce.cz/nejde-mi-elektrina', 'Czech Republic',
+     'Bounded page check only: the public checker requires an address, so page availability does not confirm a national outage.', ['cz'])
+feed('egd-power-page', 'EG.D public outage checker', 'electricity', 'html-health',
+     'https://www.egd.cz/portal-distribuce24',
+     'https://www.egd.cz/portal-distribuce24', 'Czech Republic',
+     'Bounded page check only: the public checker is location-driven and does not expose a verified national outage API.', ['cz'])
+feed('pre-power-page', 'PREdistribuce public outage checker', 'electricity', 'html-health',
+     'https://www.pre.cz/cs/domacnosti/sluzby-zakaznikum/technicke-sluzby-pre/hlaseni-poruchy/elektrina/',
+     'https://www.pre.cz/cs/domacnosti/sluzby-zakaznikum/technicke-sluzby-pre/hlaseni-poruchy/elektrina/', 'Czech Republic',
+     'Bounded page check only: the public checker is location-driven and does not expose a verified national outage API.', ['cz'])
+feed('stromnetz-berlin-power-scrape', 'Stromnetz Berlin current outage status', 'electricity', 'html-power',
+     'https://www.stromnetz.berlin/technik-und-innovationen/storungsmanagement/',
+     'https://www.stromnetz.berlin/technik-und-innovationen/storungsmanagement/', 'Berlin, Germany',
+     'Proof-of-concept HTML scrape of the operator current-status page. It covers Stromnetz Berlin only, not Germany nationally.', ['de'])
+feed('smard-germany', 'SMARD Germany electricity grid context', 'electricity', 'smard',
+     'https://www.smard.de/app/chart_data', 'https://www.smard.de/', 'Germany',
+     'Public Bundesnetzagentur API. Latest German grid-load data only, limited to the last seven days; this is national context, not a household outage feed.', ['de'])
+feed('ote-czech-market', 'OTE Czech electricity market context', 'electricity', 'ote-market',
+     'https://www.ote-cr.cz/en/short-term-markets/electricity/day-ahead-market',
+     'https://www.ote-cr.cz/en/short-term-markets/electricity/day-ahead-market', 'Czech Republic',
+     'Public OTE day-ahead market page scraped for the current base-load indicator; this is national context, not a local outage feed.', ['cz'])
 feed('metoffice', 'Met Office weather warnings', 'environment', 'rss', 'https://weather.metoffice.gov.uk/public/data/PWSCache/WarningsRSS/Region/UK', 'https://weather.metoffice.gov.uk/warnings-and-advice', 'UK', 'Risk context, not proof of a broadband outage. Verify warning validity at source.')
 feed('metoffice-historic', 'Met Office historic weather-warning archive', 'environment', 'portal', None, 'https://www.metoffice.gov.uk/research/library-and-archive/publications/national-severe-weather-warning-service', 'UK, March 2011 onwards', 'The supplied NSWWS Metadata 2026 workbook is bundled for History views. It records original issue date, classification, weather element and named regions; it has no validity period or geometry. The live Met Office API has no historic-warning endpoint.')
 feed('ea', 'Environment Agency flood warnings', 'environment', 'flood', 'https://environment.data.gov.uk/flood-monitoring/id/floods', 'https://check-for-flooding.service.gov.uk/', 'England', 'Environment Agency flood and river level data: Open Government Licence. Risk context, not a confirmed broadband fault.')
