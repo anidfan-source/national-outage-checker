@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 import hashlib
 import gzip
+import io
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -17,6 +18,7 @@ import threading
 import time
 import urllib.request
 import urllib.parse
+import zipfile
 import xml.etree.ElementTree as ET
 from sources import SOURCES
 from locations import enrich, reference_summary
@@ -154,14 +156,24 @@ def parse_cap(source, raw):
                   '; '.join(dict.fromkeys(area_desc)) or source['scope'])]
 
 def cap_latest_url(source):
+    """Choose the newest CAP/XML or DWD CAP ZIP by directory timestamp."""
     listing=fetch(source['url']).decode('utf-8', 'replace')
     candidates=[]
-    for href in re.findall(r'href=["\']([^"\']+)["\']', listing, re.I):
-        if href.rstrip('/').endswith(('.xml', '.xml.gz')):
-            candidates.append(urllib.parse.urljoin(source['url'], href))
+    row_pattern=re.compile(
+        r'href=["\\']([^"\\']+\\.(?:xml|xml\\.gz|zip))["\\'][^<]*</a>\\s+'
+        r'(\\d{2}-[A-Za-z]{3}-\\d{4} \\d{2}:\\d{2}(?::\\d{2})?)',
+        re.I,
+    )
+    for match in row_pattern.finditer(listing):
+        href, modified=match.groups()
+        try:
+            timestamp=datetime.strptime(modified, '%d-%b-%Y %H:%M:%S')
+        except ValueError:
+            timestamp=datetime.strptime(modified, '%d-%b-%Y %H:%M')
+        candidates.append((timestamp, urllib.parse.urljoin(source['url'], href)))
     if not candidates:
-        raise ValueError('No CAP/XML files found in warning directory')
-    return sorted(set(candidates))[-1]
+        raise ValueError('No CAP/XML or CAP ZIP files found in warning directory')
+    return max(candidates, key=lambda item: item[0])[1]
 
 def parse(source, raw):
     kind = source['kind']
@@ -288,9 +300,19 @@ def collect(source):
         elif source['kind'] == 'cap':
             cap_url = cap_latest_url(source)
             payload = fetch(cap_url)
-            if cap_url.endswith('.gz'):
-                payload = gzip.decompress(payload)
-            records = parse(source, payload)
+            if cap_url.endswith('.zip'):
+                records = []
+                with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                    for name in archive.namelist():
+                        if name.endswith(('.xml', '.xml.gz')):
+                            item = archive.read(name)
+                            if name.endswith('.gz'):
+                                item = gzip.decompress(item)
+                            records.extend(parse(source, item))
+            else:
+                if cap_url.endswith('.gz'):
+                    payload = gzip.decompress(payload)
+                records = parse(source, payload)
         elif source['kind'] == 'statuspage':
             records = parse(source, fetch(source['url']))
             # The history endpoint is capped; separately fetch all unresolved incidents.
