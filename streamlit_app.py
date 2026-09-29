@@ -655,11 +655,11 @@ def feeds_howto_view():
             st.write(source.get('note') or source.get('scope') or 'Provider page listed for manual checking.')
             feed_instructions(source)
     st.subheader('Operational checklist')
-    st.markdown('- Start with a small backfill and measure response size, parse time and duplicate rate.
+    st.markdown('''- Start with a small backfill and measure response size, parse time and duplicate rate.
 - Keep raw source payloads for replay when a parser changes.
 - Partition larger datasets by source and observation date; index externalId, status and geography.
 - Paginate bulk APIs and stream ZIP/CSV exports; never render the whole source table in one browser interaction.
-- Treat credentials as server-side secrets and document licensing, retention and attribution requirements.')
+- Treat credentials as server-side secrets and document licensing, retention and attribution requirements.''')
 
 def broadband_view(): category_view('broadband','Broadband & provider notices','Direct provider notices and connectivity reports that may affect a home connection.')
 def power_view(): category_view('electricity','Power cuts & infrastructure','Power incidents can interrupt home routers, street cabinets and local network equipment.')
