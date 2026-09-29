@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 import hashlib
+import gzip
 import html
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -111,8 +112,61 @@ def postcode_district(value):
     match = re.match(r'^\s*([A-Z]{1,2}\d[A-Z\d]?)\b', str(value or ''), re.I)
     return match.group(1).upper() if match else None
 
+def cap_value(node, name):
+    for child in node.iter():
+        if child.tag.split('}')[-1] == name:
+            return ''.join(child.itertext()).strip()
+    return ''
+
+def cap_centroid(value):
+    pairs=[]
+    for match in re.finditer(r'(-?\\d+(?:\\.\\d+)?),\\s*(-?\\d+(?:\\.\\d+)?)', value or ''):
+        lat,lng=float(match.group(1)),float(match.group(2))
+        if -90 <= lat <= 90 and -180 <= lng <= 180:
+            pairs.append((lat,lng))
+    if not pairs:
+        return None,None
+    return sum(pair[0] for pair in pairs) / len(pairs), sum(pair[1] for pair in pairs) / len(pairs)
+
+def parse_cap(source, raw):
+    root=ET.fromstring(raw)
+    identifier=cap_value(root, 'identifier') or hashlib.sha256(raw).hexdigest()
+    info=next((node for node in root.iter() if node.tag.split('}')[-1] == 'info'), root)
+    event_name=cap_value(info, 'event')
+    headline=cap_value(info, 'headline') or event_name or source['name']
+    description=cap_value(info, 'description')
+    severity=cap_value(info, 'severity').casefold()
+    status='warning' if not severity else severity
+    area_nodes=[node for node in info.iter() if node.tag.split('}')[-1] == 'area']
+    area_desc=[]
+    polygon=''
+    for area in area_nodes:
+        area_desc.extend(
+            ''.join(child.itertext()).strip()
+            for child in area
+            if child.tag.split('}')[-1] == 'areaDesc' and ''.join(child.itertext()).strip()
+        )
+        if not polygon:
+            polygon=cap_value(area, 'polygon')
+    lat,lng=cap_centroid(polygon)
+    return [event(source, identifier, headline, cap_value(root, 'onset') or cap_value(root, 'sent'),
+                  status, description, source['website'], lat, lng,
+                  '; '.join(dict.fromkeys(area_desc)) or source['scope'])]
+
+def cap_latest_url(source):
+    listing=fetch(source['url']).decode('utf-8', 'replace')
+    candidates=[]
+    for href in re.findall(r'href=["\']([^"\']+)["\']', listing, re.I):
+        if href.rstrip('/').endswith(('.xml', '.xml.gz')):
+            candidates.append(urllib.parse.urljoin(source['url'], href))
+    if not candidates:
+        raise ValueError('No CAP/XML files found in warning directory')
+    return sorted(set(candidates))[-1]
+
 def parse(source, raw):
     kind = source['kind']
+    if kind == 'cap':
+        return parse_cap(source, raw)
     if kind == 'gointernet':
         # The board has no documented API. Only parse the public active-incident section;
         # closed history is deliberately excluded from the live evidence view.
@@ -231,6 +285,12 @@ def collect(source):
             else:
                 raise ValueError('Power feed exceeds pagination limit; refusing partial snapshot')
             records = parse(source, json.dumps({'results': rows}))
+        elif source['kind'] == 'cap':
+            cap_url = cap_latest_url(source)
+            payload = fetch(cap_url)
+            if cap_url.endswith('.gz'):
+                payload = gzip.decompress(payload)
+            records = parse(source, payload)
         elif source['kind'] == 'statuspage':
             records = parse(source, fetch(source['url']))
             # The history endpoint is capped; separately fetch all unresolved incidents.
