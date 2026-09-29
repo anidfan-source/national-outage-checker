@@ -13,6 +13,7 @@ let data = { incidents: [], sources: [] };
 let live = true;
 let pageSize = 50;
 let apiAvailable = false;
+let dashboardETag = null;
 let map, activeLayer;
 if (window.L) {
   map = L.map('map').setView([54.5, -3.5], 6);
@@ -138,8 +139,11 @@ function renderTimeline() {
 }
 async function load() {
   try {
-    const response = await fetch('/api/dashboard', {signal: AbortSignal.timeout(15000)});
+    const headers = dashboardETag ? {'If-None-Match': dashboardETag} : {};
+    const response = await fetch('/api/dashboard', {headers, cache: 'no-cache', signal: AbortSignal.timeout(15000)});
+    if (response.status === 304) return;
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    dashboardETag = response.headers.get('ETag') || dashboardETag;
     data = await response.json();
     apiAvailable = true;
     const selected = $('sourceFilter').value;
@@ -185,5 +189,5 @@ $('liveToggle').addEventListener('click', ()=>{
 });
 $('showMore').addEventListener('click', ()=>{pageSize+=50;render();});
 load();
-setInterval(load, 15000);
+setInterval(load, 60000);
 

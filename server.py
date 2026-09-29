@@ -28,6 +28,7 @@ DB = ROOT / 'data' / 'outages.sqlite3'
 INTERVAL = 300
 LOCK = threading.Lock()
 STATE = {'sources': [], 'updatedAt': None, 'refreshing': True}
+SNAPSHOT_CACHE = {'key': None, 'payload': None}
 SCOTTISH_WARNING_REGIONS = (
     'Orkney & Shetland', 'Highlands & Eilean Siar', 'Grampian', 'Strathclyde',
     'Central, Tayside & Fife', 'SW Scotland, Lothian Borders',
@@ -278,10 +279,15 @@ def refresh():
         conn.execute('DELETE FROM incidents WHERE seen < ?', ((datetime.now(timezone.utc) - timedelta(days=366)).isoformat(),))
     with LOCK:
         STATE = dict(sources=[h for h, _ in results], updatedAt=now(), refreshing=False)
+        SNAPSHOT_CACHE['key'] = None
+        SNAPSHOT_CACHE['payload'] = None
 
 def snapshot():
     with LOCK:
         state = json.loads(json.dumps(STATE))
+        cache_key = state.get('updatedAt')
+        if SNAPSHOT_CACHE['key'] == cache_key and SNAPSHOT_CACHE['payload'] is not None:
+            return SNAPSHOT_CACHE['payload']
     health = {s['id']: s for s in state['sources']}
     with database() as conn:
         rows = conn.execute('SELECT source,seen,current,body FROM incidents').fetchall()
@@ -289,6 +295,9 @@ def snapshot():
                            'stale': health.get(source, {}).get('state') != 'connected' or outdated(json.loads(body).get('sourceUpdatedAt'), date)} for source, seen, current, body in rows]
     state['locationReference'] = reference_summary()
     state['pollSeconds'] = INTERVAL
+    with LOCK:
+        SNAPSHOT_CACHE['key'] = cache_key
+        SNAPSHOT_CACHE['payload'] = state
     return state
 
 def worker():
@@ -304,8 +313,16 @@ def worker():
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
-        if path == '/api/dashboard':
-            payload, mime = json.dumps(snapshot()).encode(), 'application/json'
+        is_dashboard = path == '/api/dashboard'
+        if is_dashboard:
+            etag = '"' + str(STATE.get('updatedAt') or 'initial') + '"'
+            if self.headers.get('If-None-Match') == etag:
+                self.send_response(304)
+                self.send_header('ETag', etag)
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                return
+            payload, mime = json.dumps(snapshot(), separators=(',', ':')).encode(), 'application/json'
         elif path in ('/', '/index.html', '/app.js', '/reports.js', '/styles.css'):
             name = 'index.html' if path == '/' else path[1:]
             payload = (ROOT / name).read_bytes()
@@ -316,7 +333,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', mime + '; charset=utf-8')
         self.send_header('Content-Length', str(len(payload)))
-        self.send_header('Cache-Control', 'no-store')
+        if is_dashboard:
+            self.send_header('ETag', etag)
+            self.send_header('Cache-Control', 'no-cache')
+        else:
+            self.send_header('Cache-Control', 'public, max-age=300, stale-while-revalidate=60')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.end_headers()
         self.wfile.write(payload)
