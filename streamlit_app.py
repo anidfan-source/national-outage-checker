@@ -61,6 +61,39 @@ MARKETS = {
     },
 }
 ACTIVE_MARKET = 'uk'
+ACTIVE_LANGUAGE = 'en'
+
+MARKET_LANGUAGES = {
+    'uk': {'en': 'English'},
+    'cz': {'en': 'English', 'cs': 'Čeština'},
+    'de': {'en': 'English', 'de': 'Deutsch'},
+}
+
+TRANSLATIONS = {
+    'en': {
+        'country_market': 'Country / market',
+        'language': 'Language',
+        'locked': 'Feeds and map locked to',
+        'updated': 'Updated',
+    },
+    'cs': {
+        'country_market': 'Země / trh',
+        'language': 'Jazyk',
+        'locked': 'Datové zdroje a mapa jsou uzamčeny pro trh',
+        'updated': 'Aktualizováno',
+    },
+    'de': {
+        'country_market': 'Land / Markt',
+        'language': 'Sprache',
+        'locked': 'Datenquellen und Karte sind auf den Markt beschränkt:',
+        'updated': 'Aktualisiert',
+    },
+}
+
+def translate(key, fallback=None):
+    language = ACTIVE_LANGUAGE if ACTIVE_LANGUAGE in TRANSLATIONS else 'en'
+    return TRANSLATIONS[language].get(key, fallback or TRANSLATIONS['en'].get(key, key))
+
 
 def market_point_in_bounds(point, market=None):
     market = market or ACTIVE_MARKET
@@ -382,7 +415,7 @@ def filters(data, page_categories=None):
 def header(data, eyebrow, title, description):
     fresh=sum(s.get('state')=='connected' for s in data['sources'] if s.get('kind')!='portal'); stale=sum(s.get('state')=='stale' for s in data['sources'])
     st.markdown(f'<div class="eyebrow">{eyebrow}</div>',unsafe_allow_html=True); st.title(title); st.caption(description)
-    st.caption(f"{MARKETS[ACTIVE_MARKET]['label']} · Updated {display_time(data.get('updatedAt'))} · {fresh} live feeds connected · {stale} stale source{'s' if stale!=1 else ''}")
+    st.caption(f"{MARKETS[ACTIVE_MARKET]['label']} · {translate('updated')} {display_time(data.get('updatedAt'))} · {fresh} live feeds connected · {stale} stale source{'s' if stale!=1 else ''}")
 
 def exports(records, data, summary):
     payload=report(records,data['sources'],summary,data.get('updatedAt')); a,b,c=st.columns(3)
@@ -780,14 +813,26 @@ try: DATA=load_dashboard()
 except Exception as error: st.error(f'Unable to collect feeds: {type(error).__name__}: {error}'); st.stop()
 
 selected_market = st.sidebar.selectbox(
-    'Country / market',
+    translate('country_market'),
     options=list(MARKETS),
     format_func=lambda key: MARKETS[key]['label'],
     key='market_selector',
 )
 ACTIVE_MARKET = selected_market
+language_options = MARKET_LANGUAGES[ACTIVE_MARKET]
+saved_language = st.session_state.get('market_language', next(iter(language_options)))
+if saved_language not in language_options:
+    saved_language = next(iter(language_options))
+selected_language = st.sidebar.selectbox(
+    translate('language'),
+    options=list(language_options),
+    format_func=lambda key: language_options[key],
+    index=list(language_options).index(saved_language),
+    key='market_language',
+)
+ACTIVE_LANGUAGE = selected_language
 DATA = market_snapshot(DATA, ACTIVE_MARKET)
-st.sidebar.caption(f"Feeds and map locked to {MARKETS[ACTIVE_MARKET]['label']}.")
+st.sidebar.caption(f"{translate('locked')} {MARKETS[ACTIVE_MARKET]['label']}.")
 
 navigation=st.navigation({'Explore':[st.Page(correlated_view,title='Correlated view',icon='🔎',default=True),st.Page(trends_view,title='Trends',icon='🔥'),st.Page(broadband_view,title='Broadband',icon='📶'),st.Page(power_view,title='Power',icon='⚡'),st.Page(weather_view,title='Weather & flood',icon='🌦️'),st.Page(roadworks_view,title='Street Manager / Roadworks',icon='🚧'),st.Page(routing_view,title='Network signals',icon='🌐'),st.Page(services_view,title='Services',icon='☁️')],'Trust':[st.Page(sources_view,title='Source health',icon='📊')],'Integrate':[st.Page(feeds_howto_view,title='How to connect feeds',icon='🔌')]},position='sidebar')
 navigation.run()
