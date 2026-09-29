@@ -490,10 +490,11 @@ def map_insight_picker(points, key):
     map_insight(selected)
 
 def _selected_map_id(event):
-    """Normalize PyDeck selection payloads across supported Streamlit versions."""
+    """Normalize PyDeck's layer-keyed selection payload."""
     selection=getattr(event,'selection',None) if event else None
     objects=getattr(selection,'objects',None) if selection else None
-    if isinstance(objects,dict): objects=[objects]
+    if isinstance(objects,dict):
+        objects=next((value for value in objects.values() if value),[])
     if objects:
         selected=objects[0]
         if not isinstance(selected,dict):
@@ -503,15 +504,15 @@ def _selected_map_id(event):
         if isinstance(nested,dict): selected=nested
         return selected.get('pointId',selected.get('point_id',selected.get('id')))
     indices=getattr(selection,'indices',None) if selection else None
-    if isinstance(indices,(list,tuple)) and indices:
-        return indices[0]
+    if isinstance(indices,dict):
+        indices=next((value for value in indices.values() if value),[])
+    if isinstance(indices,(list,tuple)) and indices: return indices[0]
     return None
 
 def render_map_chart(chart, points, chart_key, selector_key):
     """Use native PyDeck selection when available, with stable-ID fallback."""
     try:
-        selection_options={'on_'+'select':'rerun','selection_'+'mode':'single-object'}
-        event=st.pydeck_chart(chart,**selection_options,key=chart_key)
+        event=st.pydeck_chart(chart,on_select='rerun',selection_mode='single-object',key=chart_key)
         point_id=_selected_map_id(event)
         if point_id is not None:
             selected=next((point for point in points if str(point.get('pointId'))==str(point_id)),None)
@@ -531,10 +532,10 @@ def map_records(records, selection=None):
         legend='&nbsp;&nbsp;'.join(f'<span style="color:rgb({color[0]},{color[1]},{color[2]});font-weight:700">●</span> {CATEGORY_LABELS[key]}' for key,color in CATEGORY_COLORS.items())
         st.markdown(f'<div style="font-size:.85rem;margin:.2rem 0 .6rem">{legend}</div>',unsafe_allow_html=True)
         centre=search_points[0] if search_points else {'lat':MARKETS[ACTIVE_MARKET]['center'][0],'lon':MARKETS[ACTIVE_MARKET]['center'][1]}
-        layers=[pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=5000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=9,
+        layers=[pdk.Layer('ScatterplotLayer',id='outage-points',data=points,get_position='[lon, lat]',get_radius=5000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=9,
                               get_fill_color='color',get_line_color='[255, 255, 255, 230]',line_width_min_pixels=1,pickable=True,auto_highlight=True)]
         if search_points: layers.append(pdk.Layer('ScatterplotLayer',data=search_points,get_position='[lon, lat]',get_radius=700,
-            radius_min_pixels=8,radius_max_pixels=12,get_fill_color='[255,255,255,30]',get_line_color='[13,110,253,255]',
+            id='search-location',radius_min_pixels=8,radius_max_pixels=12,get_fill_color='[255,255,255,30]',get_line_color='[13,110,253,255]',
             line_width_min_pixels=3,stroked=True,pickable=True))
         chart=pdk.Deck(
             initial_view_state=pdk.ViewState(latitude=centre['lat'],longitude=centre['lon'],zoom=9 if search_points else 5.2,min_zoom=4.7,max_zoom=11,pitch=0),
@@ -555,7 +556,7 @@ def impact_heatmap(records):
     points=[{'lat':p['lat'],'lon':p['lng'],'weight':impact_weight(item),'area':(item.get('postcodeAreas') or [item.get('region') or ''])[0], 'areaLabel':area_label((item.get('postcodeAreas') or [item.get('region') or ''])[0]), 'title':item.get('title'),'provider':item.get('provider'),'category':CATEGORY_LABELS.get(item.get('category'),item.get('category')),'category_key':item.get('category'),'status':item.get('status'),'description':item.get('description'),'locationDescription':item.get('locationDescription'),'promoter':item.get('promoter'),'workReferenceNumber':item.get('workReferenceNumber'),'trafficManagementType':item.get('trafficManagementType'),'sourceFields':item.get('sourceFields'),'published':display_time(item.get('date'),'not supplied'),'raised':display_time(item.get('raisedAt'),'not supplied'),'start':display_time(item.get('actualStartAt') or item.get('proposedStartAt'),'not supplied'),'end':display_time(item.get('actualEndAt') or item.get('proposedEndAt'),'not supplied'),'url':item.get('url')} for item in records for p in item.get('locationPoints',[]) if 49.5 <= p['lat'] <= 61.5 and -8.8 <= p['lng'] <= 2.2]
     for i,point in enumerate(points): point.update(pointId=i,mapKey='impact_heatmap')
     if not points: st.info('No mapped locations match these filters.'); return
-    chart=pdk.Deck(initial_view_state=market_view_state(),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',data=points,get_position='[lon, lat]',get_radius=3000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=8,get_fill_color='[0, 0, 0, 1]',pickable=True,auto_highlight=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
+    chart=pdk.Deck(initial_view_state=market_view_state(),views=[pdk.View(type_='MapView',controller={'minZoom':4.7,'maxZoom':11,'maxBounds':[[-9.25,49.4],[2.25,61.4]]})],layers=[pdk.Layer('HeatmapLayer',id='impact-heatmap',data=points,get_position='[lon, lat]',get_weight='weight',radius_pixels=55,intensity=1,threshold=0.08,color_range=[[255,255,204],[255,237,160],[254,178,76],[240,59,32],[189,0,38]]),pdk.Layer('ScatterplotLayer',id='impact-points',data=points,get_position='[lon, lat]',get_radius=3000,radius_scale=1,radius_min_pixels=4,radius_max_pixels=8,get_fill_color='[0, 0, 0, 1]',pickable=True,auto_highlight=True)],map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json')
     left,right=st.columns((3,2),gap='large')
     with left: render_map_chart(chart,points,'impact_heatmap','impact_heatmap_record')
     with right: map_insight_picker(points,'impact_heatmap_record')
