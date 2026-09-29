@@ -65,9 +65,15 @@ def collect_srwr(source,make_event,parse_date):
                     desc=_pick(row,"description","works description","work description","activity description") or ""
                     item=make_event(source,ref,f"Telecom road works · {promoter}",start,status,
                         ". ".join(x for x in (street,town,desc) if x),source["website"],region=town or street or "Scotland")
+                    source_fields={}
+                    for key,value in row.items():
+                        cleaned=_clean(value)
+                        if cleaned:
+                            source_fields[_clean(key)] = cleaned[:4000]
                     item.update(evidenceType="roadworks-context",promoter=promoter,workReferenceNumber=ref,
                         locationDescription=" · ".join(x for x in (street,town) if x),
                         workDescription=desc, proposedStartAt=start,proposedEndAt=end,
+                        sourceFields=source_fields,
                         attribution="Scottish Road Works Register (SRWR)")
                     records.append(item)
     return records,{"coverage":"Scotland SRWR Disruptions Export; telecom-related current road works only.","scannedCount":scanned}
