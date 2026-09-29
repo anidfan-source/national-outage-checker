@@ -16,9 +16,14 @@ def _norm(value):
     return re.sub(r"[^a-z0-9]+"," ",str(value or "").casefold()).strip()
 
 def _pick(row,*names):
-    norm={_norm(k).replace(" ","_"):v for k,v in row.items()}
+    def key(value):
+        # SRWR uses both spaced headers and PascalCase export headers such as
+        # WorksPromoterName and StartDateTimeUTC.
+        spaced=re.sub(r"([a-z0-9])([A-Z])",r"\1 \2",str(value or ""))
+        return _norm(spaced).replace(" ","_")
+    norm={key(k):v for k,v in row.items()}
     for name in names:
-        value=norm.get(_norm(name).replace(" ","_"))
+        value=norm.get(key(name))
         if value not in (None,""): return value
     return None
 
@@ -69,7 +74,11 @@ def collect_srwr(source,make_event,parse_date):
     csv.field_size_limit(10_000_000)
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         for name in archive.namelist():
-            if not name.lower().endswith(".csv"): continue
+            # The export also contains completed activities and bus-conflict notices.
+            # Those rows do not carry the current works location and can be matched
+            # accidentally through a promoter reference such as "BT". CurrentActivities
+            # is the location-bearing dataset used by the live roadworks view.
+            if not name.lower().endswith(".csv") or "current" not in name.casefold(): continue
             with archive.open(name) as fh:
                 reader=csv.DictReader(io.TextIOWrapper(fh,encoding="utf-8-sig",errors="replace"))
                 for row in reader:
@@ -77,19 +86,26 @@ def collect_srwr(source,make_event,parse_date):
                     if not _telecom(row): continue
                     status=_pick(row,"works status","work status","status") or "roadworks"
                     if any(x in _norm(status) for x in ("cancelled","canceled","complete","completed")): continue
-                    promoter=_pick(row,"promoter organisation","promoter","organisation","undertaker") or "Telecom roadworks"
-                    ref=_pick(row,"promoter reference","works reference","work reference","reference") or hashlib.sha256(str(row).encode()).hexdigest()
-                    start=_pick(row,"start","start date","proposed start","actual start")
-                    end=_pick(row,"end","end date","proposed end","expected end")
-                    street=_pick(row,"street","street name","location","location description","address")
-                    town=_pick(row,"town","locality","area")
+                    promoter=_pick(row,"promoter organisation","promoter","organisation","undertaker","works promoter name") or "Telecom roadworks"
+                    ref=_pick(row,"promoter reference","works reference","work reference","reference","activity reference","local reference") or hashlib.sha256(str(row).encode()).hexdigest()
+                    start=_pick(row,"start","start date","proposed start","actual start","start date time utc","startdatetimeutc")
+                    end=_pick(row,"end","end date","proposed end","expected end","end date time utc","enddatetimeutc")
+                    detailed_location=_pick(row,"location","location description","address","detailed location")
+                    street=_pick(row,"street","street name")
+                    locality=_pick(row,"locality","area")
+                    town=_pick(row,"town")
                     desc=_pick(row,"description","works description","work description","activity description") or ""
+                    lat=_pick(row,"latitude","lat")
+                    lng=_pick(row,"longitude","lng","lon")
+                    location_parts=[x for x in (detailed_location,street,locality,town) if x]
                     item=make_event(source,ref,f"Telecom road works · {promoter}",start,status,
-                        ". ".join(x for x in (street,town,desc) if x),source["website"],region=town or street or "Scotland")
+                        ". ".join(x for x in (detailed_location,street,locality,town,desc) if x),source["website"],
+                        lat=lat,lng=lng,region=town or locality or street or detailed_location or "Scotland")
                     source_fields=_compact_source_fields(row)
                     item.update(evidenceType="roadworks-context",promoter=promoter,workReferenceNumber=ref,
-                        locationDescription=" · ".join(x for x in (street,town) if x),
+                        locationDescription=" · ".join(location_parts),
                         workDescription=desc, proposedStartAt=start,proposedEndAt=end,
+                        latitude=lat,longitude=lng,street=street,locality=locality,town=town,
                         sourceFields=source_fields,
                         attribution="Scottish Road Works Register (SRWR)")
                     records.append(item)
