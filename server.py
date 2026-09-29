@@ -161,7 +161,7 @@ def cap_latest_url(source):
     candidates=[]
     row_pattern=re.compile(
         r"""href=["']([^"']+\.(?:xml|xml\.gz|zip))["'][^<]*</a>\s+"""
-        r"""(\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}(?::\d{2})?)""","
+        r"""(\d{2}-[A-Za-z]{3}-\d{4} \d{2}:\d{2}(?::\d{2})?)""",
         re.I,
     )
     for match in row_pattern.finditer(listing):
