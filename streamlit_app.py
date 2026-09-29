@@ -475,35 +475,48 @@ def map_insight_picker(points, key):
         return
     options=points[:250]
     if len(points)>len(options): st.caption(f"Showing the first {len(options)} mapped records; use the published evidence list for the full set.")
-    selected=st.selectbox('Mapped record',range(len(options)),format_func=lambda i: f"{options[i].get('provider') or 'Unknown provider'} · {options[i].get('title') or 'Untitled notice'}",key=key)
-    map_insight(options[selected])
+    option_ids=[str(point.get('pointId')) for point in options]
+    if st.session_state.get(key) not in option_ids:
+        st.session_state.pop(key,None)
+    selected_id=st.selectbox(
+        'Mapped record', option_ids,
+        format_func=lambda point_id: next(
+            (f"{point.get('provider') or 'Unknown provider'} · {point.get('title') or 'Untitled notice'}"
+             for point in options if str(point.get('pointId')) == str(point_id)),
+            'Untitled notice'),
+        key=key,
+    )
+    selected=next((point for point in options if str(point.get('pointId')) == str(selected_id)),None)
+    map_insight(selected)
+
+def _selected_map_id(event):
+    """Normalize PyDeck selection payloads across supported Streamlit versions."""
+    selection=getattr(event,'selection',None) if event else None
+    objects=getattr(selection,'objects',None) if selection else None
+    if isinstance(objects,dict): objects=[objects]
+    if objects:
+        selected=objects[0]
+        if not isinstance(selected,dict):
+            try: selected=dict(selected)
+            except (TypeError,ValueError): selected={}
+        nested=selected.get('object')
+        if isinstance(nested,dict): selected=nested
+        return selected.get('pointId',selected.get('point_id',selected.get('id')))
+    indices=getattr(selection,'indices',None) if selection else None
+    if isinstance(indices,(list,tuple)) and indices:
+        return indices[0]
+    return None
 
 def render_map_chart(chart, points, chart_key, selector_key):
-    """Use native PyDeck selection when available, with selector fallback."""
+    """Use native PyDeck selection when available, with stable-ID fallback."""
     try:
         selection_options={'on_'+'select':'rerun','selection_'+'mode':'single-object'}
         event=st.pydeck_chart(chart,**selection_options,key=chart_key)
-        objects=getattr(getattr(event,'selection',None),'objects',[]) if event else []
-        if isinstance(objects,dict):
-            objects=[objects]
-        elif objects and not isinstance(objects,(list,tuple)):
-            try:
-                objects=list(objects)
-            except TypeError:
-                objects=[]
-        if objects:
-            selected_object=objects[0]
-            if isinstance(selected_object,dict):
-                point_id=selected_object.get('pointId')
-            else:
-                try:
-                    point_id=selected_object['pointId']
-                except (KeyError,TypeError,IndexError):
-                    point_id=getattr(selected_object,'pointId',None)
-            if point_id is not None:
-                selected=next((index for index,point in enumerate(points) if point.get('pointId')==point_id),None)
-                if selected is not None:
-                    st.session_state[selector_key]=selected
+        point_id=_selected_map_id(event)
+        if point_id is not None:
+            selected=next((point for point in points if str(point.get('pointId'))==str(point_id)),None)
+            if selected is not None:
+                st.session_state[selector_key]=str(selected['pointId'])
         return event
     except TypeError:
         return st.pydeck_chart(chart,key=chart_key)
