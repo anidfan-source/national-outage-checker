@@ -28,6 +28,7 @@ DB = ROOT / 'data' / 'outages.sqlite3'
 INTERVAL = 300
 LOCK = threading.Lock()
 STATE = {'sources': [], 'updatedAt': None, 'refreshing': True}
+SNAPSHOT_CACHE = {'key': None, 'payload': None}
 SCOTTISH_WARNING_REGIONS = (
     'Orkney & Shetland', 'Highlands & Eilean Siar', 'Grampian', 'Strathclyde',
     'Central, Tayside & Fife', 'SW Scotland, Lothian Borders',
@@ -278,10 +279,15 @@ def refresh():
         conn.execute('DELETE FROM incidents WHERE seen < ?', ((datetime.now(timezone.utc) - timedelta(days=366)).isoformat(),))
     with LOCK:
         STATE = dict(sources=[h for h, _ in results], updatedAt=now(), refreshing=False)
+        SNAPSHOT_CACHE['key'] = None
+        SNAPSHOT_CACHE['payload'] = None
 
 def snapshot():
     with LOCK:
         state = json.loads(json.dumps(STATE))
+        cache_key = state.get('updatedAt')
+        if SNAPSHOT_CACHE['key'] == cache_key and SNAPSHOT_CACHE['payload'] is not None:
+            return SNAPSHOT_CACHE['payload']
     health = {s['id']: s for s in state['sources']}
     with database() as conn:
         rows = conn.execute('SELECT source,seen,current,body FROM incidents').fetchall()
@@ -289,6 +295,9 @@ def snapshot():
                            'stale': health.get(source, {}).get('state') != 'connected' or outdated(json.loads(body).get('sourceUpdatedAt'), date)} for source, seen, current, body in rows]
     state['locationReference'] = reference_summary()
     state['pollSeconds'] = INTERVAL
+    with LOCK:
+        SNAPSHOT_CACHE['key'] = cache_key
+        SNAPSHOT_CACHE['payload'] = state
     return state
 
 def worker():
