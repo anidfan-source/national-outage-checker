@@ -53,10 +53,31 @@ function scalarValues(value: unknown): string[] {
   return [];
 }
 
+const RELEVANT_FIELD_KEYS = new Set([
+  "promoterorganisation", "promoterorganisationname", "workspromotername",
+  "promotername", "organisationname", "promoter", "workdescription",
+  "worksdescription", "description", "activitytype", "worktype",
+  "workcategory", "permitcategory", "activitydescription",
+]);
+
+function compactKey(value: unknown): string {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function relevantFieldValues(value: unknown): string[] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  const values: string[] = [];
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (RELEVANT_FIELD_KEYS.has(compactKey(key))) values.push(...scalarValues(child));
+    if (child && typeof child === "object" && !Array.isArray(child)) {
+      values.push(...relevantFieldValues(child));
+    }
+  }
+  return values;
+}
+
 function searchableText(event: Record<string, unknown>): string {
-  // Street Manager payloads have changed field names between notification types.
-  // Search all scalar values so telecom works are not discarded because a field moved.
-  return normalise(scalarValues(eventData(event)).join(" "));
+  return normalise(relevantFieldValues(eventData(event)).join(" "));
 }
 
 function isTelecomEvent(event: Record<string, unknown>): boolean {
@@ -213,9 +234,14 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
   if (isCancelledEvent(event)) {
     const objectReference = event.object_reference || null;
     if (objectReference) {
-      await env.DB.prepare(
-        "DELETE FROM messages WHERE topic = ? AND object_reference = ?",
-      ).bind(topic, objectReference).run();
+      const existing = await env.DB.prepare(
+        "SELECT message_id FROM messages WHERE topic = ? AND object_reference = ? LIMIT 1",
+      ).bind(topic, objectReference).first();
+      if (existing) {
+        await env.DB.prepare(
+          "DELETE FROM messages WHERE topic = ? AND object_reference = ?",
+        ).bind(topic, objectReference).run();
+      }
     }
     return json({ ok: true, topic, ignored: true, reason: "cancelled" });
   }
@@ -223,28 +249,39 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
     return json({ ok: true, topic, ignored: true, reason: "non-telecom" });
   }
 
+  const payload = JSON.stringify(event);
+  const objectReference = event.object_reference || null;
+  if (objectReference) {
+    const existing = await env.DB.prepare(
+      "SELECT payload FROM messages WHERE topic = ? AND object_reference = ? LIMIT 1",
+    ).bind(topic, objectReference).first<{ payload: string }>();
+    if (existing?.payload === payload) {
+      return json({ ok: true, topic, ignored: true, reason: "duplicate" });
+    }
+  }
+
+  // Keep the hot path to one D1 row write. Activity and retention are derived/read
+  // during API requests instead of adding writes to every SNS notification.
+  await env.DB.prepare(
+    `INSERT INTO messages
+     (message_id, received_at, event_time, event_type, object_reference, object_type, topic, payload)
+     VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(topic, object_reference) WHERE object_reference IS NOT NULL DO UPDATE SET
+       message_id=excluded.message_id,
+       received_at=excluded.received_at,
+       event_time=excluded.event_time,
+       event_type=excluded.event_type,
+       object_type=excluded.object_type,
+       payload=excluded.payload`,
+  ).bind(
+    message.MessageId, event.event_time || null, event.event_type || null,
+    objectReference, objectType, topic, payload,
+  ).run();
+  return json({ ok: true, topic });
+}
+
+async function pruneMessages(env: Env): Promise<void> {
   await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO messages
-       (message_id, received_at, event_time, event_type, object_reference, object_type, topic, payload)
-       VALUES (?, datetime('now'), ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(topic, object_reference) WHERE object_reference IS NOT NULL DO UPDATE SET
-         message_id=excluded.message_id,
-         received_at=excluded.received_at,
-         event_time=excluded.event_time,
-         event_type=excluded.event_type,
-         object_type=excluded.object_type,
-         payload=excluded.payload`,
-    ).bind(
-      message.MessageId, event.event_time || null, event.event_type || null,
-      event.object_reference || null, objectType, topic, JSON.stringify(event),
-    ),
-    env.DB.prepare(
-      `INSERT INTO topic_activity(topic, last_event_at, last_received_at, event_count)
-       VALUES (?, ?, datetime('now'), 1)
-       ON CONFLICT(topic) DO UPDATE SET last_event_at=excluded.last_event_at,
-       last_received_at=excluded.last_received_at, event_count=topic_activity.event_count + 1`,
-    ).bind(topic, event.event_time || null),
     env.DB.prepare(
       `DELETE FROM messages
        WHERE received_at < datetime('now', '-${CLOSED_RETENTION_DAYS} days')
@@ -261,13 +298,13 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
     ),
     env.DB.prepare(`DELETE FROM messages WHERE received_at < datetime('now', '-${ACTIVE_RETENTION_DAYS} days')`),
   ]);
-  return json({ ok: true, topic });
 }
 
 async function events(request: Request, env: Env): Promise<Response> {
   if (!env.READ_TOKEN || request.headers.get("authorization") !== `Bearer ${env.READ_TOKEN}`) {
     return json({ error: "Unauthorized" }, 401);
   }
+  await pruneMessages(env);
   const url = new URL(request.url);
   const topic = url.searchParams.get("topic");
   if (topic && !(topic in TOPICS)) return json({ error: "Unknown Street Manager topic" }, 400);
@@ -284,10 +321,13 @@ async function status(request: Request, env: Env): Promise<Response> {
   if (!env.READ_TOKEN || request.headers.get("authorization") !== `Bearer ${env.READ_TOKEN}`) {
     return json({ error: "Unauthorized" }, 401);
   }
+  await pruneMessages(env);
   const [subscriptions, activity, totals] = await env.DB.batch([
     env.DB.prepare("SELECT topic, confirmed_at FROM subscription_status ORDER BY topic"),
     env.DB.prepare(
-      "SELECT topic, last_event_at, last_received_at, event_count FROM topic_activity ORDER BY topic",
+      `SELECT topic, MAX(event_time) AS last_event_at, MAX(received_at) AS last_received_at,
+              COUNT(*) AS event_count
+       FROM messages GROUP BY topic ORDER BY topic`,
     ),
     env.DB.prepare("SELECT topic, COUNT(*) AS stored_count FROM messages GROUP BY topic ORDER BY topic"),
   ]);
