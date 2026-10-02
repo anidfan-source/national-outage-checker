@@ -2,3 +2,5 @@ streamlit>=1.32,<1.64
 fastapi>=0.115,<1
 uvicorn[standard]>=0.30,<1
 cryptography>=43,<47
+folium>=0.16,<1
+streamlit-folium>=0.20,<1
