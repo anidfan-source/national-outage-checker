@@ -9,8 +9,12 @@ from zoneinfo import ZoneInfo
 
 import pydeck as pdk
 import streamlit as st
-import folium
-from streamlit_folium import st_folium
+try:
+    import folium
+    from streamlit_folium import st_folium
+except ImportError:
+    folium = None
+    st_folium = None
 import server
 from historic_flood import fetch_historic_flood_warnings
 from historic_weather import fetch_historic_weather_warnings
@@ -535,8 +539,42 @@ def _balanced_map_points(points, limit=250):
     return selected[:limit]
 
 
+def render_leaflet_map(points):
+    """Dependency-free fallback for hosts before optional map packages install."""
+    payload = json.dumps([
+        {
+            'lat': point.get('lat'),
+            'lon': point.get('lon'),
+            'title': point.get('title') or 'Untitled notice',
+            'provider': point.get('provider') or 'Unknown provider',
+            'category': point.get('category') or 'Evidence',
+            'area': point.get('areaLabel') or 'Area unknown',
+            'colour': '#%02x%02x%02x' % tuple(CATEGORY_COLORS.get(point.get('category_key'), [71,85,105,220])[:3]),
+        }
+        for point in _balanced_map_points(points)
+    ], ensure_ascii=False).replace('</', '<\\/')
+    html = f"""<!doctype html><html><head>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>html,body,#map{{margin:0;width:100%;height:520px;background:#f8fafc}}.leaflet-popup-content{{font:14px system-ui,sans-serif;line-height:1.35}}</style>
+</head><body><div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script>
+const points={payload}; const esc=v=>String(v??'').replace(/[&<>"]/g,ch=>({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}})[ch]);
+const map=L.map('map',{{zoomControl:true,preferCanvas:true}}).setView([54.5,-3.4],5.2);
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png',{{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}}).addTo(map);
+const bounds=[]; points.forEach(p=>{{if(typeof p.lat!=='number'||typeof p.lon!=='number')return;
+L.circleMarker([p.lat,p.lon],{{radius:7,color:'#fff',weight:1,fillColor:p.colour,fillOpacity:.9}})
+ .addTo(map).bindPopup('<b>'+esc(p.provider)+'</b><br>'+esc(p.title)+'<br><small>'+esc(p.category)+' · '+esc(p.area)+'</small>');
+bounds.push([p.lat,p.lon]);}});
+if(bounds.length>1)map.fitBounds(bounds,{{padding:[20,20],maxZoom:10}});
+</script></body></html>"""
+    st.components.v1.html(html, height=540, scrolling=False)
+
+
 def render_interactive_map(points, selector_key):
     """Render a non-WebGL map whose marker clicks update Streamlit state."""
+    if folium is None or st_folium is None:
+        render_leaflet_map(points)
+        return
     visible = _balanced_map_points(points)
     config = MARKETS[ACTIVE_MARKET]
     fmap = folium.Map(
