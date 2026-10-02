@@ -600,6 +600,13 @@ def render_interactive_map(points, selector_key):
         )
         folium.Marker(
             location=[point['lat'], point['lon']],
+            icon=folium.DivIcon(
+                html=f'<div style="width:14px;height:14px;border-radius:50%;'
+                     f'background:{colour};border:2px solid #ffffff;'
+                     f'box-shadow:0 1px 4px rgba(0,0,0,.45);"></div>',
+                icon_size=(18, 18),
+                icon_anchor=(9, 9),
+            ),
             tooltip=f"{point.get('category') or 'Evidence'} · {point.get('title') or 'Untitled notice'}",
             popup=popup,
         ).add_to(fmap)
