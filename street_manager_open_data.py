@@ -17,12 +17,34 @@ def _key(value):
     spaced=re.sub(r'([a-z0-9])([A-Z])',r'\1 \2',str(value or ''))
     return re.sub(r'[^a-z0-9]+','_',spaced.casefold()).strip('_')
 
+def _decode_object(value):
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            decoded=json.loads(value)
+            return decoded if isinstance(decoded, dict) else {}
+        except (TypeError,ValueError):
+            return {}
+    return {}
+
+
 def _row_data(row):
-    data=row.get('object_data') or row
-    if isinstance(data,str):
-        try: data=json.loads(data)
-        except (TypeError,ValueError): data={}
-    return data if isinstance(data,dict) else row
+    """Unwrap receiver/D1 notification envelopes before field extraction."""
+    if not isinstance(row, dict):
+        return {}
+    candidates=[row.get('object_data'), row.get('payload'), row.get('body'),
+                row.get('message'), row.get('Message'), row.get('event'), row]
+    for candidate in candidates:
+        data=_decode_object(candidate)
+        if not data:
+            continue
+        for nested_key in ('object_data','payload','body','message','Message','event','detail','data'):
+            nested=_decode_object(data.get(nested_key))
+            if nested:
+                data={**data, **nested}
+        return data
+    return row
 
 def _is_telecom_record(data):
     fields=[
