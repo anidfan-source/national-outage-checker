@@ -9,6 +9,8 @@ from zoneinfo import ZoneInfo
 
 import pydeck as pdk
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
 import server
 from historic_flood import fetch_historic_flood_warnings
 from historic_weather import fetch_historic_weather_warnings
@@ -515,52 +517,83 @@ def _selected_map_id(event):
     if isinstance(indices,(list,tuple)) and indices: return indices[0]
     return None
 
-def render_leaflet_map(points):
-    """Render the main map without WebGL so it works on restricted browsers."""
-    payload = json.dumps([
-        {
-            'lat': point.get('lat'),
-            'lon': point.get('lon'),
-            'title': point.get('title') or 'Untitled notice',
-            'provider': point.get('provider') or 'Unknown provider',
-            'category': point.get('category') or 'Evidence',
-            'area': point.get('areaLabel') or 'Area unknown',
-        }
-        for point in points[:250]
-    ], ensure_ascii=False).replace('</', '<\\/')
-    html = f"""<!doctype html>
-<html>
-<head>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<style>
-html, body, #map {{ margin:0; width:100%; height:520px; background:#f8fafc; }}
-.leaflet-popup-content {{ font:14px system-ui,sans-serif; line-height:1.35; }}
-</style>
-</head>
-<body>
-<div id="map"></div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-const points = {payload};
-const esc = value => String(value ?? '').replace(/[&<>"]/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}})[ch]);
-const map = L.map('map', {{ zoomControl:true, preferCanvas:true }}).setView([54.5, -3.4], 5.2);
-L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-  maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
-}}).addTo(map);
-const bounds = [];
-points.forEach(point => {{
-  if (typeof point.lat !== 'number' || typeof point.lon !== 'number') return;
-  const marker = L.circleMarker([point.lat, point.lon], {{
-    radius:6, color:'#ffffff', weight:1, fillColor:'#8b5cf6', fillOpacity:0.9
-  }}).addTo(map);
-  marker.bindPopup('<strong>'+esc(point.provider)+'</strong><br>'+esc(point.title)+'<br><small>'+esc(point.category)+' · '+esc(point.area)+'</small>');
-  bounds.push([point.lat, point.lon]);
-}});
-if (bounds.length > 1) map.fitBounds(bounds, {{padding:[20,20], maxZoom:10}});
-</script>
-</body>
-</html>"""
-    st.components.v1.html(html, height=540, scrolling=False)
+def _balanced_map_points(points, limit=250):
+    """Keep the fallback map representative across evidence categories."""
+    if len(points) <= limit:
+        return points
+    grouped = defaultdict(list)
+    for point in points:
+        grouped[point.get('category_key') or 'other'].append(point)
+    selected = []
+    categories = list(grouped)
+    per_category = max(1, limit // max(1, len(categories)))
+    for category in categories:
+        selected.extend(grouped[category][:per_category])
+    if len(selected) < limit:
+        selected_ids = {id(point) for point in selected}
+        selected.extend(point for point in points if id(point) not in selected_ids)
+    return selected[:limit]
+
+
+def render_interactive_map(points, selector_key):
+    """Render a non-WebGL map whose marker clicks update Streamlit state."""
+    visible = _balanced_map_points(points)
+    config = MARKETS[ACTIVE_MARKET]
+    fmap = folium.Map(
+        location=config['center'],
+        zoom_start=int(round(config['zoom'])),
+        min_zoom=4,
+        max_zoom=12,
+        max_bounds=True,
+        control_scale=True,
+        tiles='OpenStreetMap',
+    )
+    if visible:
+        bounds = [[point['lat'], point['lon']] for point in visible]
+        fmap.fit_bounds(bounds, padding=(20, 20), max_zoom=10)
+    for point in visible:
+        rgb = CATEGORY_COLORS.get(point.get('category_key'), [71, 85, 105, 220])
+        colour = '#%02x%02x%02x' % tuple(rgb[:3])
+        popup = folium.Popup(
+            f"<b>{point.get('provider') or 'Unknown provider'}</b><br>"
+            f"{point.get('title') or 'Untitled notice'}<br>"
+            f"<small>{point.get('category') or 'Evidence'} · {point.get('areaLabel') or 'Area unknown'}</small>",
+            max_width=360,
+        )
+        folium.CircleMarker(
+            location=[point['lat'], point['lon']],
+            radius=7,
+            color='#ffffff',
+            weight=1,
+            fill=True,
+            fill_color=colour,
+            fill_opacity=0.9,
+            tooltip=f"{point.get('category') or 'Evidence'} · {point.get('title') or 'Untitled notice'}",
+            popup=popup,
+        ).add_to(fmap)
+    result = st_folium(
+        fmap,
+        height=540,
+        use_container_width=True,
+        returned_objects=['last_object_clicked'],
+        key=f"{selector_key}_map",
+    )
+    clicked = (result or {}).get('last_object_clicked') if isinstance(result, dict) else None
+    if clicked and clicked.get('lat') is not None and clicked.get('lng') is not None:
+        try:
+            lat, lng = float(clicked['lat']), float(clicked['lng'])
+            nearest = min(
+                visible,
+                key=lambda point: (float(point['lat']) - lat) ** 2 + (float(point['lon']) - lng) ** 2,
+                default=None,
+            )
+            if nearest is not None:
+                st.session_state[selector_key] = str(nearest['pointId'])
+                st.rerun()
+        except (TypeError, ValueError):
+            pass
+
+
 
 def render_map_chart(chart, points, chart_key, selector_key):
     """Use native PyDeck selection when available, with stable-ID fallback."""
@@ -597,7 +630,7 @@ def map_records(records, selection=None):
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         left,right=st.columns((3,2),gap='large')
-        with left: render_leaflet_map(points)
+        with left: render_interactive_map(points,'outage_map_record')
         with right: map_insight_picker(points,'outage_map_record')
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
