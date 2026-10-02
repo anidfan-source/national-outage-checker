@@ -598,14 +598,8 @@ def render_interactive_map(points, selector_key):
             f"<small>{point.get('category') or 'Evidence'} · {point.get('areaLabel') or 'Area unknown'}</small>",
             max_width=360,
         )
-        folium.CircleMarker(
+        folium.Marker(
             location=[point['lat'], point['lon']],
-            radius=7,
-            color='#ffffff',
-            weight=1,
-            fill=True,
-            fill_color=colour,
-            fill_opacity=0.9,
             tooltip=f"{point.get('category') or 'Evidence'} · {point.get('title') or 'Untitled notice'}",
             popup=popup,
         ).add_to(fmap)
