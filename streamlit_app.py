@@ -515,6 +515,53 @@ def _selected_map_id(event):
     if isinstance(indices,(list,tuple)) and indices: return indices[0]
     return None
 
+def render_leaflet_map(points):
+    """Render the main map without WebGL so it works on restricted browsers."""
+    payload = json.dumps([
+        {
+            'lat': point.get('lat'),
+            'lon': point.get('lon'),
+            'title': point.get('title') or 'Untitled notice',
+            'provider': point.get('provider') or 'Unknown provider',
+            'category': point.get('category') or 'Evidence',
+            'area': point.get('areaLabel') or 'Area unknown',
+        }
+        for point in points[:250]
+    ], ensure_ascii=False).replace('</', '<\\/')
+    html = f"""<!doctype html>
+<html>
+<head>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+html, body, #map {{ margin:0; width:100%; height:520px; background:#f8fafc; }}
+.leaflet-popup-content {{ font:14px system-ui,sans-serif; line-height:1.35; }}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const points = {payload};
+const esc = value => String(value ?? '').replace(/[&<>"]/g, ch => ({{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}})[ch]);
+const map = L.map('map', {{ zoomControl:true, preferCanvas:true }}).setView([54.5, -3.4], 5.2);
+L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+  maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+}}).addTo(map);
+const bounds = [];
+points.forEach(point => {{
+  if (typeof point.lat !== 'number' || typeof point.lon !== 'number') return;
+  const marker = L.circleMarker([point.lat, point.lon], {{
+    radius:6, color:'#ffffff', weight:1, fillColor:'#8b5cf6', fillOpacity:0.9
+  }}).addTo(map);
+  marker.bindPopup('<strong>'+esc(point.provider)+'</strong><br>'+esc(point.title)+'<br><small>'+esc(point.category)+' · '+esc(point.area)+'</small>');
+  bounds.push([point.lat, point.lon]);
+}});
+if (bounds.length > 1) map.fitBounds(bounds, {{padding:[20,20], maxZoom:10}});
+</script>
+</body>
+</html>"""
+    st.components.v1.html(html, height=540, scrolling=False)
+
 def render_map_chart(chart, points, chart_key, selector_key):
     """Use native PyDeck selection when available, with stable-ID fallback."""
     try:
@@ -550,7 +597,7 @@ def map_records(records, selection=None):
             map_style='https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
         )
         left,right=st.columns((3,2),gap='large')
-        with left: render_map_chart(chart,points,'outage_map','outage_map_record')
+        with left: render_leaflet_map(points)
         with right: map_insight_picker(points,'outage_map_record')
     else: st.info('No mapped locations match these filters. Provider notices without coordinates are still listed below.')
 
