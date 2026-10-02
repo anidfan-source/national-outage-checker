@@ -607,10 +607,12 @@ def render_interactive_map(points, selector_key):
         fmap,
         height=540,
         use_container_width=True,
-        returned_objects=['last_object_clicked'],
+        returned_objects=['last_object_clicked', 'last_clicked'],
         key=f"{selector_key}_map",
     )
-    clicked = (result or {}).get('last_object_clicked') if isinstance(result, dict) else None
+    clicked = None
+    if isinstance(result, dict):
+        clicked = result.get('last_object_clicked') or result.get('last_clicked')
     if clicked and clicked.get('lat') is not None and clicked.get('lng') is not None:
         try:
             lat, lng = float(clicked['lat']), float(clicked['lng'])
