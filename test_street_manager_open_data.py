@@ -78,6 +78,11 @@ class StreetManagerOpenDataTests(unittest.TestCase):
         self.assertIn("Outside 10 High Street", record["locationDescription"])
         self.assertIn("Leeds", record["locationDescription"])
         self.assertEqual(record["proposedStartAt"], "2026-09-29T08:00:00Z")
+        self.assertEqual(record["promoter"], "Openreach")
+        self.assertEqual(record["street"], "High Street")
+        self.assertEqual(record["trafficManagementType"], "Lane closure")
+        self.assertNotIn("proposedEndAt", record)
+        self.assertNotIn("actualEndAt", record)
 
     def test_reads_outer_fields_and_geojson_coordinates(self):
         payload = {"events": [{
