@@ -122,7 +122,7 @@ def collect_street_manager_open_data(source,make_event,parse_date):
     token=os.getenv("STREET_MANAGER_WEBHOOK_TOKEN","")
     if not url or not token:
         raise RuntimeError("Street Manager Open Data receiver is not configured")
-    req=urllib.request.Request(url+"/api/events?limit=5000",headers={
+    req=urllib.request.Request(url+"/api/events?limit=500",headers={
         "Accept":"application/json","Authorization":"Bearer "+token,
         "User-Agent":"UK-Outage-Viewer/1.0"})
     with urllib.request.urlopen(req,timeout=18) as response:
@@ -145,14 +145,9 @@ def collect_street_manager_open_data(source,make_event,parse_date):
         street=_first_value(data,row,"street_name","street","road_name")
         locality=_first_value(data,row,"locality","area_name","district","place")
         town=_first_value(data,row,"town","town_name","city")
-        category=_first_value(data,row,"work_category","work_type","activity_type")
         traffic=_first_value(data,row,"traffic_management_type","traffic_management","traffic_management_description")
         status=_display_status(data,event_type)
-        proposed_start=_first_value(data,row,"proposed_start_time","proposed_start_date","start_time","start_date")
-        proposed_end=_first_value(data,row,"proposed_end_time","proposed_end_date","end_time","end_date")
-        actual_start=_first_value(data,row,"actual_start_date_time","actual_start","work_start_date")
-        actual_end=_first_value(data,row,"actual_end_date_time","actual_end","work_end_date")
-        description=_first_value(data,row,"work_description","works_description","description","activity_description")
+        proposed_start=_first_value(data,row,"proposed_start_time","proposed_start_date","start_time","start_date","actual_start_date_time","actual_start")
         lat,lng=_coordinates(data,row)
         title="Telecom street works · "+str(event_type or "update").replace("_"," ").title()
         if promoter: title += " · "+str(promoter)
@@ -161,13 +156,9 @@ def collect_street_manager_open_data(source,make_event,parse_date):
             value=_text(value)
             if value and value not in location_parts: location_parts.append(value)
         bits=[x for x in [
-            f"Location: {detailed_location}" if _text(detailed_location) else None,
+            f"Promoter: {promoter}" if _text(promoter) else None,
             f"Street: {street}" if _text(street) else None,
-            f"Locality: {locality}" if _text(locality) else None,
-            f"Town: {town}" if _text(town) else None,
-            f"Category: {category}" if category else None,
             f"Traffic management: {traffic}" if traffic else None,
-            f"Description: {description}" if description else None,
         ] if x]
         event_time=_first_value(row,data,"event_time","event_timestamp","created_at")
         item=make_event(source,event_ref,title,event_time,status,
@@ -175,16 +166,11 @@ def collect_street_manager_open_data(source,make_event,parse_date):
                         source["website"],lat=lat,lng=lng,
                         region=town or locality or street or detailed_location or source["scope"])
         item.update(evidenceType="roadworks-context",workReferenceNumber=wrn,
-                    locationDescription=" · ".join(location_parts),
-                    permitReferenceNumber=_first_value(data,row,"permit_reference_number","permit_reference"),
-                    promoter=promoter,workCategory=category,trafficManagementType=traffic,
-                    usrn=_first_value(data,row,"usrn","usrn_reference"),eventType=event_type,
-                    street=street,locality=locality,town=town,
+                    promoter=promoter,street=street,
                     latitude=lat,longitude=lng,
                     locationSource="source-coordinates" if lat is not None and lng is not None else "source-text",
-                    raisedAt=event_time,
-                    proposedStartAt=proposed_start,proposedEndAt=proposed_end,
-                    actualStartAt=actual_start,actualEndAt=actual_end,
+                    raisedAt=event_time,proposedStartAt=proposed_start,
+                    trafficManagementType=traffic,
                     attribution="Department for Transport Street Manager Open Data")
         records.append(item)
     return list({r["id"]:r for r in records}.values()),{
