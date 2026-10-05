@@ -97,6 +97,53 @@ function isCancelledEvent(event: Record<string, unknown>): boolean {
   return CANCELLED_TERMS.some((term) => statusText.includes(term));
 }
 
+
+const COMPACT_FIELDS: Record<string, string[]> = {
+  workReferenceNumber: ["work_reference_number", "work_reference", "works_reference", "reference", "activity_reference", "object_reference"],
+  promoterOrganisation: ["promoter_organisation", "promoter_organisation_name", "works_promoter_name", "promoter_name", "organisation_name", "promoter"],
+  streetName: ["street_name", "street", "road_name"],
+  latitude: ["latitude", "lat", "location_latitude", "start_latitude"],
+  longitude: ["longitude", "lng", "lon", "location_longitude", "start_longitude"],
+  startDate: ["proposed_start_time", "proposed_start_date", "start_time", "start_date", "actual_start_date_time", "actual_start"],
+  trafficManagementType: ["traffic_management_type", "traffic_management", "traffic_management_description"],
+};
+
+function fieldValue(value: unknown, names: string[]): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const wanted = new Set(names.map(compactKey));
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (wanted.has(compactKey(key)) && child != null && child !== "") return child;
+  }
+  for (const child of Object.values(value as Record<string, unknown>)) {
+    const nested = fieldValue(child, names);
+    if (nested != null && nested !== "") return nested;
+  }
+  return null;
+}
+
+function compactEvent(event: Record<string, unknown>): Record<string, unknown> {
+  const data = eventData(event);
+  const value = (name: keyof typeof COMPACT_FIELDS) =>
+    fieldValue(data, COMPACT_FIELDS[name]) ?? fieldValue(event, COMPACT_FIELDS[name]);
+  const workReferenceNumber = value("workReferenceNumber") ?? event.object_reference ?? null;
+  return {
+    object_reference: event.object_reference ?? workReferenceNumber,
+    event_reference: event.event_reference ?? event.event_id ?? event.object_reference ?? null,
+    event_time: event.event_time ?? event.event_timestamp ?? event.created_at ?? null,
+    event_type: event.event_type ?? event.event_name ?? null,
+    object_type: event.object_type ?? null,
+    object_data: {
+      WorkReferenceNumber: workReferenceNumber,
+      PromoterOrganisationName: value("promoterOrganisation"),
+      StreetName: value("streetName"),
+      Latitude: value("latitude"),
+      Longitude: value("longitude"),
+      ProposedStartDate: value("startDate"),
+      TrafficManagementType: value("trafficManagementType"),
+    },
+  };
+}
+
 function json(data: unknown, status = 200): Response {
   return Response.json(data, { status, headers: { "Cache-Control": "no-store" } });
 }
@@ -249,8 +296,11 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
     return json({ ok: true, topic, ignored: true, reason: "non-telecom" });
   }
 
-  const payload = JSON.stringify(event);
-  const objectReference = event.object_reference || null;
+  // Store only the fields needed by the dashboard. This keeps D1 writes and
+  // the dashboard response bounded even when the DfT notification schema grows.
+  const compact = compactEvent(event);
+  const payload = JSON.stringify(compact);
+  const objectReference = compact.object_reference ? String(compact.object_reference) : null;
   if (objectReference) {
     const existing = await env.DB.prepare(
       "SELECT payload FROM messages WHERE topic = ? AND object_reference = ? LIMIT 1",
@@ -314,7 +364,9 @@ async function events(request: Request, env: Env): Promise<Response> {
     ? env.DB.prepare("SELECT payload FROM messages WHERE topic = ? ORDER BY received_at DESC LIMIT ?").bind(topic, limit)
     : env.DB.prepare("SELECT payload FROM messages ORDER BY received_at DESC LIMIT ?").bind(limit);
   const result = await statement.all<{ payload: string }>();
-  return json({ ok: true, events: result.results.map((row) => JSON.parse(row.payload)) });
+  // Compact legacy rows at read time too, so records saved before this change
+  // cannot make the dashboard response exceed its safety limit.
+  return json({ ok: true, events: result.results.map((row) => compactEvent(JSON.parse(row.payload))) });
 }
 
 async function status(request: Request, env: Env): Promise<Response> {
