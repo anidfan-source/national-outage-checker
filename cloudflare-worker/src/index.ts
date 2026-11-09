@@ -9,6 +9,16 @@ const TOPICS: Record<string, string> = {
   "section-58": "arn:aws:sns:eu-west-2:287813576808:prod-section-58-topic",
 };
 
+// Permit notifications contain the utility works relevant to outage correlation.
+// Activity and Section 58 are acknowledged but deliberately not confirmed or
+// processed, keeping future registrations permit-only. Existing subscriptions
+// must still be removed by DfT to stop their requests reaching the Worker.
+const ENABLED_TOPICS = new Set(["permit"]);
+
+// SNS uses a small, stable set of signing certificates. Reusing an imported key
+// within a warm isolate avoids a certificate fetch and DER parse for every event.
+const SNS_KEY_CACHE = new Map<string, Promise<CryptoKey>>();
+
 const OBJECT_TYPES: Record<string, Set<string>> = {
   permit: new Set(["PERMIT", "WORK"]),
   activity: new Set(["ACTIVITY"]),
@@ -219,13 +229,23 @@ async function verifySns(message: SnsMessage, topic: string): Promise<boolean> {
   if (message.TopicArn !== TOPICS[topic] || !["1", "2"].includes(message.SignatureVersion)) return false;
   const certUrl = awsSnsUrl(message.SigningCertURL, true);
   if (!certUrl) return false;
-  const certResponse = await fetch(certUrl, { headers: { "User-Agent": "National-Outage-Checker/1.0" } });
-  if (!certResponse.ok) return false;
-  const certificate = pemBytes(await certResponse.text());
   const algorithm = message.SignatureVersion === "1" ? "SHA-1" : "SHA-256";
-  const key = await crypto.subtle.importKey(
-    "spki", certificateSpki(certificate), { name: "RSASSA-PKCS1-v1_5", hash: algorithm }, false, ["verify"],
-  );
+  const cacheKey = `${certUrl.href}|${algorithm}`;
+  let keyPromise = SNS_KEY_CACHE.get(cacheKey);
+  if (!keyPromise) {
+    keyPromise = (async () => {
+      const certResponse = await fetch(certUrl, { headers: { "User-Agent": "National-Outage-Checker/1.0" } });
+      if (!certResponse.ok) throw new Error("Unable to fetch SNS certificate");
+      const certificate = pemBytes(await certResponse.text());
+      return crypto.subtle.importKey(
+        "spki", certificateSpki(certificate),
+        { name: "RSASSA-PKCS1-v1_5", hash: algorithm }, false, ["verify"],
+      );
+    })();
+    SNS_KEY_CACHE.set(cacheKey, keyPromise);
+    keyPromise.catch(() => SNS_KEY_CACHE.delete(cacheKey));
+  }
+  const key = await keyPromise;
   const signature = Uint8Array.from(atob(message.Signature), (char) => char.charCodeAt(0));
   return crypto.subtle.verify(
     { name: "RSASSA-PKCS1-v1_5" }, key, signature,
@@ -245,6 +265,9 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
   if (message.Type !== headerType) return json({ error: "SNS message type mismatch" }, 400);
   const topic = requestedTopic || Object.keys(TOPICS).find((name) => TOPICS[name] === message.TopicArn);
   if (!topic || !(topic in TOPICS)) return json({ error: "Unknown Street Manager topic" }, 403);
+  if (!ENABLED_TOPICS.has(topic)) {
+    return json({ ok: true, topic, ignored: true, reason: "topic-disabled" });
+  }
   try {
     if (!(await verifySns(message, topic))) return json({ error: "Invalid SNS signature or topic" }, 403);
   } catch {
@@ -281,14 +304,9 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
   if (isCancelledEvent(event)) {
     const objectReference = event.object_reference || null;
     if (objectReference) {
-      const existing = await env.DB.prepare(
-        "SELECT message_id FROM messages WHERE topic = ? AND object_reference = ? LIMIT 1",
-      ).bind(topic, objectReference).first();
-      if (existing) {
-        await env.DB.prepare(
-          "DELETE FROM messages WHERE topic = ? AND object_reference = ?",
-        ).bind(topic, objectReference).run();
-      }
+      await env.DB.prepare(
+        "DELETE FROM messages WHERE topic = ? AND object_reference = ?",
+      ).bind(topic, objectReference).run();
     }
     return json({ ok: true, topic, ignored: true, reason: "cancelled" });
   }
@@ -301,17 +319,8 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
   const compact = compactEvent(event);
   const payload = JSON.stringify(compact);
   const objectReference = compact.object_reference ? String(compact.object_reference) : null;
-  if (objectReference) {
-    const existing = await env.DB.prepare(
-      "SELECT payload FROM messages WHERE topic = ? AND object_reference = ? LIMIT 1",
-    ).bind(topic, objectReference).first<{ payload: string }>();
-    if (existing?.payload === payload) {
-      return json({ ok: true, topic, ignored: true, reason: "duplicate" });
-    }
-  }
-
-  // Keep the hot path to one D1 row write. Activity and retention are derived/read
-  // during API requests instead of adding writes to every SNS notification.
+  // A conditional upsert replaces the previous read-compare-write sequence.
+  // Identical retries perform no update and consume no additional D1 write row.
   await env.DB.prepare(
     `INSERT INTO messages
      (message_id, received_at, event_time, event_type, object_reference, object_type, topic, payload)
@@ -322,7 +331,8 @@ async function receive(request: Request, env: Env, requestedTopic: string | null
        event_time=excluded.event_time,
        event_type=excluded.event_type,
        object_type=excluded.object_type,
-       payload=excluded.payload`,
+       payload=excluded.payload
+     WHERE messages.payload <> excluded.payload`,
   ).bind(
     message.MessageId, event.event_time || null, event.event_type || null,
     objectReference, objectType, topic, payload,
@@ -354,7 +364,6 @@ async function events(request: Request, env: Env): Promise<Response> {
   if (!env.READ_TOKEN || request.headers.get("authorization") !== `Bearer ${env.READ_TOKEN}`) {
     return json({ error: "Unauthorized" }, 401);
   }
-  await pruneMessages(env);
   const url = new URL(request.url);
   const topic = url.searchParams.get("topic");
   if (topic && !(topic in TOPICS)) return json({ error: "Unknown Street Manager topic" }, 400);
@@ -373,7 +382,6 @@ async function status(request: Request, env: Env): Promise<Response> {
   if (!env.READ_TOKEN || request.headers.get("authorization") !== `Bearer ${env.READ_TOKEN}`) {
     return json({ error: "Unauthorized" }, 401);
   }
-  await pruneMessages(env);
   const [subscriptions, activity, totals] = await env.DB.batch([
     env.DB.prepare("SELECT topic, confirmed_at FROM subscription_status ORDER BY topic"),
     env.DB.prepare(
@@ -409,4 +417,8 @@ export default {
     if (request.method === "POST" && match) return receive(request, env, match[1]);
     return json({ error: "Not found" }, 404);
   },
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    await pruneMessages(env);
+  },
 };
+
